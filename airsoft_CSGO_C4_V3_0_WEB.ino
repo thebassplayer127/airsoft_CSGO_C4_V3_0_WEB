@@ -178,6 +178,15 @@ void loop() {
         }
         break;
 
+        case EASTER_EGG_2:
+        if (millis() - stateEntryTimestamp > 10000) {
+          bombArmedTimestamp = millis();
+          myDFPlayer.play(SOUND_BOMB_PLANTED);
+          c4OnEnterArmed(); // Make sure to call this!
+          setState(ARMED);
+        }
+        break;
+
       default: break;
     }
   }

@@ -431,8 +431,8 @@ inline bool resolveScoreboardIP() {
 
   // Query only; mDNS BEGIN happens in beginNetwork()/networkReconfigure()
   const uint32_t MDNS_QUERY_TIMEOUT_MS = 250;
-  IPAddress ip = MDNS.queryHost("scoreboard");
-  if (ip == IPAddress(0,0,0,0)) ip = MDNS.queryHost("scoreboard.local");
+  IPAddress ip = MDNS.queryHost("scoreboard", MDNS_QUERY_TIMEOUT_MS);
+  if (ip == IPAddress(0,0,0,0)) ip = MDNS.queryHost("scoreboard.local", MDNS_QUERY_TIMEOUT_MS);
   if (ip != IPAddress(0,0,0,0)) {
     cachedScoreboardIP = ip;
     Serial.printf("[NET] mDNS resolved scoreboard.local -> %s\n", ipToString(ip).c_str());
