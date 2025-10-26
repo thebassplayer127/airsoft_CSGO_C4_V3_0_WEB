@@ -430,6 +430,7 @@ inline bool resolveScoreboardIP() {
   lastResolveAttemptMs = now;
 
   // Query only; mDNS BEGIN happens in beginNetwork()/networkReconfigure()
+  const uint32_t MDNS_QUERY_TIMEOUT_MS = 250;
   IPAddress ip = MDNS.queryHost("scoreboard");
   if (ip == IPAddress(0,0,0,0)) ip = MDNS.queryHost("scoreboard.local");
   if (ip != IPAddress(0,0,0,0)) {
@@ -487,7 +488,7 @@ inline void networkLoop() {
 
   // --- WebSocket connect watchdog: bail out if a connect is stuck >5s ---
   if (wsConnecting) {
-    const unsigned long WS_CONNECT_STUCK_MS = 5000;
+    const unsigned long WS_CONNECT_STUCK_MS = 1000;
     if (millis() - wsConnectingSinceMs > WS_CONNECT_STUCK_MS) {
       Serial.println("[NET] WS connect watchdog: aborting stuck attempt");
       wsClient.disconnect();
@@ -500,39 +501,56 @@ inline void networkLoop() {
 
   // If connected to Wi-Fi, maybe resolve and maybe schedule WS connect
   if (WiFi.isConnected()) {
-    if (settings.net_use_mdns) resolveScoreboardIP();
+
+    // --- NEW FIX v3 ---
+    // Gate ALL network activity (mDNS, WS) during critical/interactive states
+    extern PropState currentState;  // from State.h
+    bool inCriticalGameplay =
+      (currentState == ARMED) ||
+      (currentState == DISARMING_KEYPAD) ||
+      (currentState == DISARMING_MANUAL) ||
+      (currentState == DISARMING_RFID) ||
+      // Also include all interactive states to prevent lag
+      (currentState == PROP_IDLE) ||
+      (currentState == ARMING) ||
+      (currentState == CONFIG_MODE);
 
     unsigned long now = millis();
-
+    
     // Respect cooldown after repeated failures
     if (wsBackoffUntilMs && now < wsBackoffUntilMs) {
-      // stay quiet until cooldown expires
-    } else {
-      if (wsBackoffUntilMs && now >= wsBackoffUntilMs) wsBackoffUntilMs = 0;
+      // Stay quiet until cooldown expires
+      if (now + WS_RECONNECT_MS > nextWsAttemptMs) nextWsAttemptMs = now + WS_RECONNECT_MS;
+      
+    } else if (inCriticalGameplay) {
+      // Defer all network activity until we are in a non-interactive state
+      if (now + 1500 > nextWsAttemptMs) nextWsAttemptMs = now + 1500;
 
-      // Gate new WS attempts during critical gameplay states
-      extern PropState currentState;  // from State.h
-      bool inCriticalGameplay =
-        (currentState == ARMED) ||
-        (currentState == DISARMING_KEYPAD) ||
-        (currentState == DISARMING_MANUAL) ||
-        (currentState == DISARMING_RFID);
-
-      if (!wsConnected && !wsConnecting && now >= nextWsAttemptMs) {
-        if (!inCriticalGameplay) {
-          bool canTry = settings.net_use_mdns ? (cachedScoreboardIP != IPAddress(0,0,0,0)) : true;
-          if (canTry) {
-            connectWebSocket();
-            nextWsAttemptMs = now + WS_RECONNECT_MS;
-          } else {
-            nextWsAttemptMs = now + 1000;
-          }
-        } else {
-          // Defer attempts until we exit high-priority states
-          nextWsAttemptMs = now + 1500;
+    } else if (!wsConnected && !wsConnecting && now >= nextWsAttemptMs) {
+      // --- THIS IS THE KEY CHANGE ---
+      // We are clear to attempt ONE connection.
+      // Do all blocking network tasks INSIDE this timed block.
+      
+      bool canTry = false;
+      if (settings.net_use_mdns) {
+        // 1. First blocking call: mDNS resolve (0.5s)
+        if (resolveScoreboardIP()) {
+          canTry = (cachedScoreboardIP != IPAddress(0,0,0,0));
         }
+      } else {
+        canTry = true; // Static IP, always "try"
       }
+      
+      if (canTry) {
+        // 2. Second blocking call: WebSocket connect (1.0s)
+        connectWebSocket();
+      }
+      
+      // 3. Set the backoff timer REGARDLESS of success.
+      //    The watchdog will handle the fail-and-retry.
+      nextWsAttemptMs = now + WS_RECONNECT_MS;
     }
+
   } else {
     // Not connected to Wi-Fi: gentle reminder and push WS attempts out
     static unsigned long lastMsg = 0;

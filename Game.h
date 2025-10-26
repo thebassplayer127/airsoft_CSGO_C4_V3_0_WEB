@@ -1,5 +1,6 @@
 // Game.h
-//VERSION: 2.3.0
+//VERSION: 3.0.0
+// 10.26.2025
 
 #pragma once
 #include <Arduino.h>
@@ -69,13 +70,21 @@ c4OnTimeCut(newRemaining);
     if (currentState == ARMING) {
       if ((int)strlen(enteredCode) == CODE_LENGTH) {
         strcpy(activeArmCode, enteredCode);
-        if (strcmp(enteredCode, MASTER_CODE) == 0) setState(EASTER_EGG);
-        else {
-  bombArmedTimestamp = millis();
-  myDFPlayer.play(SOUND_BOMB_PLANTED);
-  c4OnEnterArmed();                 // ⬅ tell scoreboard: planted + duration
-  setState(ARMED);
-}
+
+        if (strcmp(enteredCode, "5318008") == 0) {
+          setState(EASTER_EGG_2);
+
+        } else if (strcmp(enteredCode, MASTER_CODE) == 0) {
+          setState(EASTER_EGG);
+
+        } else {
+        
+          bombArmedTimestamp = millis();
+          myDFPlayer.play(SOUND_BOMB_PLANTED);
+          c4OnEnterArmed();                 // ⬅ tell scoreboard: planted + duration
+          setState(ARMED);
+        }
+        
       } else {
         setState(PROP_IDLE);
       }

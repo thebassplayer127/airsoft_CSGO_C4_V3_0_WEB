@@ -135,12 +135,8 @@ void loop() {
     if (currentState == PRE_EXPLOSION) {
       uint32_t since = millis() - stateEntryTimestamp;
       if (since > (PRE_EXPLOSION_FADE_MS + 1200)) {
-        if (nextTrackToPlay == SOUND_EXPLOSION_TIMESUP) {
-          myDFPlayer.play(SOUND_EXPLOSION_MAIN);
-          nextTrackToPlay = 0;
-        }
       }
-      if (since > (PRE_EXPLOSION_FADE_MS + 4000)) setState(EXPLODED);
+      if (since > (PRE_EXPLOSION_FADE_MS + 10000)) setState(EXPLODED); // 10s safety
     }
 
     switch (currentState) {

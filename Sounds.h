@@ -1,5 +1,6 @@
 // Sounds.h
-//VERSION: 2.0.0
+//VERSION: 3.0.0
+//10.26.2025
 
 #pragma once
 // MP3 track indices
@@ -16,6 +17,10 @@
 #define SOUND_EASTER_EGG_END      14
 #define SOUND_MENU_CONFIRM        15
 #define SOUND_MENU_CANCEL         16
+#define SOUND_DETONATION_NEW      17 // C4_Detonate.mp3
+#define SOUND_EASTER_EGG_2_START  18 // Jugs.mp3
+#define SOUND_EASTER_EGG_2_END    18 // (for random range)
+#define SOUND_EASTER_EGG_JUGS     18 // Alias for the first one
 #ifndef SOUND_INVALID_CARD
   #define SOUND_INVALID_CARD SOUND_MENU_CANCEL
 #endif

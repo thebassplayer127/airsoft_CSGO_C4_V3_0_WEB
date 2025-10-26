@@ -1,9 +1,9 @@
 // README.h
-//VERSION: 2.0.0
+//VERSION: 3.0.0
 
 # C4 Prop — Header-Only + Network (Arduino IDE)
 
-**Version:** v2.0.0
+**Version:** v3.0.0
 
 ## Structure
 Place in your Arduino **sketchbook** and open `C4_Prop_HeaderOnly_Net.ino`.

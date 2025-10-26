@@ -1,5 +1,6 @@
 // Display.h
-//VERSION: 2.1.1
+//VERSION: 3.0.0
+// 10.26.2025
 
 #pragma once
 #include "State.h"
@@ -290,6 +291,11 @@ inline void updateDisplay() {
         centerPrintC("ACTIVATED!", 2);
         break;
 
+      case EASTER_EGG_2:
+        centerPrintC("5318008", 1);
+        centerPrintC("ARMING...", 2);
+        break;
+
       default: break;
     }
   }
@@ -316,6 +322,9 @@ inline void updateLeds() {
       int cycle = (millis() / EASTER_EGG_CYCLE_MS) % 3;
       leds[0] = (cycle==0)?CRGB::Red: (cycle==1)?CRGB::Green: CRGB::Blue;
     } break;
+    case EASTER_EGG_2:
+      leds[0] = CRGB::HotPink; // Or any color you like
+      break;
     case CONFIG_MODE: leds[0] = CRGB::DeepPink; break;
     default: break;
   }

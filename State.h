@@ -1,5 +1,6 @@
 // State.h
-//VERSION: 2.3.0
+//VERSION: 3.0.0
+//10.26.2025
 
 #pragma once
 #include "Config.h"
@@ -14,7 +15,7 @@ void wsSendJson(const String& json);
 // Game states
 enum PropState { 
   STANDBY, AWAIT_ARM_TOGGLE, PROP_IDLE, ARMING, ARMED, DISARMING_KEYPAD, 
-  DISARMING_MANUAL, DISARMING_RFID, DISARMED, PRE_EXPLOSION, EXPLODED, EASTER_EGG,
+  DISARMING_MANUAL, DISARMING_RFID, DISARMED, PRE_EXPLOSION, EXPLODED, EASTER_EGG, EASTER_EGG_2,
   CONFIG_MODE
 };
 
@@ -63,6 +64,7 @@ inline const char* getStateName(PropState state) {
     case PRE_EXPLOSION: return "PRE_EXPLOSION";
     case EXPLODED: return "EXPLODED";
     case EASTER_EGG: return "EASTER_EGG";
+    case EASTER_EGG_2: return "EASTER_EGG_2";
     case CONFIG_MODE: return "CONFIG_MODE";
     default: return "UNKNOWN";
   }
@@ -111,11 +113,14 @@ inline void setState(PropState newState) {
       nextTrackToPlay = SOUND_BOMB_DEFUSED;
       break;
     case PRE_EXPLOSION:
-      myDFPlayer.play(SOUND_EXPLOSION_PRE);
-      nextTrackToPlay = SOUND_EXPLOSION_TIMESUP;
+      myDFPlayer.play(SOUND_DETONATION_NEW);
       break;
     case EASTER_EGG:
       myDFPlayer.play(random(SOUND_EASTER_EGG_START, SOUND_EASTER_EGG_END + 1));
+      break;
+
+    case EASTER_EGG_2:
+      myDFPlayer.play(random(SOUND_EASTER_EGG_2_START, SOUND_EASTER_EGG_2_END + 1));
       break;
     default: break;
   }
@@ -125,16 +130,37 @@ inline void printDetail(uint8_t type, int value) {
   switch (type) {
     case DFPlayerPlayFinished: {
       Serial.printf("Track %d Finished!\n", value);
+
+      // Handle new all-in-one explosion sound
+      if (value == SOUND_DETONATION_NEW) {
+        setState(EXPLODED); // Go to EXPLODED after new track finishes
+        nextTrackToPlay = 0;
+        break; // Stop further processing
+      }
+
+      // Handle Easter Egg 2 finish
+      // This checks if we are in EASTER_EGG_2 state AND the easter egg 2 sound just finished
+      if (currentState == EASTER_EGG_2 && 
+          (value >= SOUND_EASTER_EGG_2_START && value <= SOUND_EASTER_EGG_2_END)) {
+        
+        // Now, perform the normal arming sequence
+        bombArmedTimestamp = millis();
+        myDFPlayer.play(SOUND_BOMB_PLANTED);
+        c4OnEnterArmed();
+        setState(ARMED);
+        
+        nextTrackToPlay = 0; // Clear any other pending tracks
+        break; // Stop further processing
+      }
+      
+      // Old track-chaining logic
       int track = nextTrackToPlay; nextTrackToPlay = 0;
       if (track != 0) {
         myDFPlayer.play(track);
-        if (track == SOUND_EXPLOSION_TIMESUP) {
-          nextTrackToPlay = SOUND_EXPLOSION_MAIN;
-        } else if (track == SOUND_EXPLOSION_MAIN) {
-          setState(EXPLODED);
-        }
+        // Old explosion chaining logic was removed here
       }
-    } break;
+    } break; // <-- This closes the 'case DFPlayerPlayFinished:'
+    
     case DFPlayerError:
       Serial.print(F("DFPlayerError:"));
       break;

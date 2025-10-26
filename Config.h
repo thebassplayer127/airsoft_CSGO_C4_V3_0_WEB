@@ -1,12 +1,13 @@
 // Config.h
-//VERSION: 2.3.0
+//VERSION: 3.0.0
+// 10.26.2025
 
 #pragma once
 #include <Arduino.h>
 #include <EEPROM.h>
 
 // Version (shown on boot and in menu header)
-static const char* FW_VERSION = "2.3.0";
+static const char* FW_VERSION = "3.0.0";
 
 // EEPROM / Settings
 #define EEPROM_SIZE 512
