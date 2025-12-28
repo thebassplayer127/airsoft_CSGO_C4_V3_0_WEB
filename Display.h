@@ -1,11 +1,11 @@
 // Display.h
-//VERSION: 3.0.0
-// 10.26.2025
+// VERSION: 3.3.2
 
 #pragma once
 #include "State.h"
 #include "Hardware.h"
 #include "Utils.h"
+#include "ShellEjector.h"
 
 inline void clearRow(int row) {
   lcd.setCursor(0,row); lcd.print("                    ");
@@ -36,21 +36,19 @@ inline void updateDisplay() {
 
     switch (currentConfigState) {
       case MENU_MAIN: {
-        // Row 0 = fixed header; rows 1..3 = 3-item window around selection
         String header = String("CONFIG v") + FW_VERSION;
         centerPrint(header, 0);
 
         const char* items[] = {
           "Bomb Time", "Manual Disarm", "RFID Disarm",
+          "Sudden Death", "Dud Settings", 
           "RFID Tags", "Network", "Save & Exit"
         };
-        const int TOTAL = 6;
+        const int TOTAL = 8; 
 
-        // Show three items: previous (row 1), selected (row 2), next (row 3)
         for (int i = -1; i <= 1; ++i) {
-          int row = i + 2;                           // map -1→1, 0→2, +1→3
+          int row = i + 2;
           int itemIndex = (configMenuIndex + i + TOTAL) % TOTAL;
-
           clearRow(row);
           lcd.setCursor(0, row);
           String line = (i == 0 ? "> " : "  ");
@@ -71,6 +69,27 @@ inline void updateDisplay() {
         centerPrintC("(#=Save, *=Back)", 3);
       } break;
 
+      case MENU_SUDDEN_DEATH_TOGGLE: {
+        centerPrintC("Sudden Death Mode", 0);
+        centerPrintC(settings.sudden_death_mode ? "Currently: ON" : "Currently: OFF", 1);
+        centerPrintC("(#=Toggle, *=Back)", 2);
+      } break;
+
+      case MENU_DUD_SETTINGS: {
+         centerPrintC("Dud Bomb Config", 0);
+         centerPrintC(settings.dud_enabled ? "Status: ENABLED" : "Status: DISABLED", 1);
+         centerPrint(String("Chance: ") + settings.dud_chance + "%", 2);
+         centerPrintC("#=Tog 1=Set% *=Bk", 3);
+      } break;
+
+      case MENU_DUD_CHANCE: {
+         centerPrintC("Set Dud Chance %", 0);
+         centerPrintC("(1-100)", 1);
+         char buffer[21]; snprintf(buffer, sizeof(buffer), "Val: %s", configInputBuffer);
+         centerPrintC(buffer, 2);
+         centerPrintC("(#=Save)", 3);
+      } break;
+
       case MENU_VIEW_RFIDS: {
         centerPrintC("Registered RFID Tags", 0);
         if (rfidViewIndex < settings.num_rfid_uids) {
@@ -84,7 +103,6 @@ inline void updateDisplay() {
         centerPrintC("(#=Select, *=Back)", 3);
       } break;
 
-      // Network page 1
       case MENU_NETWORK: {
         centerPrintC("NETWORK", 0);
         clearRow(1); lcd.setCursor(0,1); lcd.print("WiFi: "); lcd.print(settings.wifi_enabled ? "ON" : "OFF");
@@ -92,13 +110,12 @@ inline void updateDisplay() {
         clearRow(3); lcd.setCursor(0,3); lcd.print("1 WiFi 2 Mode 3 IP");
       } break;
 
-      // Network page 2
      case MENU_NETWORK_2: {
-  centerPrintC("NETWORK", 0);
-  clearRow(1); lcd.setCursor(0,1); lcd.print("4 Port 5 MasterIP");
-  clearRow(2); lcd.setCursor(0,2); lcd.print("6 Portal 7 Apply");
-  clearRow(3); lcd.setCursor(0,3); lcd.print("8 Forget WiFi  9 Pg1");
-} break;
+        centerPrintC("NETWORK", 0);
+        clearRow(1); lcd.setCursor(0,1); lcd.print("4 Port 5 MasterIP");
+        clearRow(2); lcd.setCursor(0,2); lcd.print("6 Portal 7 Apply");
+        clearRow(3); lcd.setCursor(0,3); lcd.print("8 Forget WiFi  9 Pg1");
+      } break;
 
       case MENU_NET_ENABLE: {
         centerPrintC("WiFi Enabled?", 0);
@@ -151,25 +168,17 @@ inline void updateDisplay() {
       } break;
 
       case MENU_NET_FORGET_CONFIRM: {
-  centerPrintC("FORGET WiFi CREDS?", 0);
-  centerPrintC("This clears SSID/PWD", 1);
-  centerPrintC("(#=Yes, *=No)", 2);
-  clearRow(3);
-} break;
-
-
+        centerPrintC("FORGET WiFi CREDS?", 0);
+        centerPrintC("This clears SSID/PWD", 1);
+        centerPrintC("(#=Yes, *=No)", 2);
+        clearRow(3);
+      } break;
       default: break;
     }
     return;
   }
 
   // ---------- Normal Gameplay Overlay ----------
-  // Row usage:
-  // 0 = Timer
-  // 1 = Status / Mode
-  // 2 = Disarm code overlay (manual/RFID)
-  // 3 = Hints / spare
-
   if (currentState >= ARMED && currentState < DISARMED) {
     int32_t remaining_ms = (int32_t)settings.bomb_duration_ms - (int32_t)(millis() - bombArmedTimestamp);
     if (remaining_ms < 0) remaining_ms = 0;
@@ -224,7 +233,6 @@ inline void updateDisplay() {
       }
     }
     } else if (displayNeedsUpdate) {
-    // Non-armed states (only when marked dirty)
     displayNeedsUpdate = false;
     lcd.clear(); yield();
 
@@ -245,8 +253,6 @@ inline void updateDisplay() {
 
       case ARMING: {
         centerPrintC("Arming Code:", 1);
-
-        // Show masked entry on row 2, right-sized to CODE_LENGTH
         String formattedCode;
         int codeLen = strlen(enteredCode);
         for (int i = 0; i < CODE_LENGTH; i++) {
@@ -258,7 +264,7 @@ inline void updateDisplay() {
         centerPrintC("(# to confirm)", 3);
       } break;
 
-      case DISARMING_KEYPAD:  // (not typically hit here, but keep for safety)
+      case DISARMING_KEYPAD:  
         centerPrintC("Disarm Code:", 1);
         {
           String formattedCode;
@@ -302,6 +308,7 @@ inline void updateDisplay() {
 }
 
 inline void updateLeds() {
+  // --- 1. STATUS LED (Index 0) ---
   switch (currentState) {
     case STANDBY:
     case AWAIT_ARM_TOGGLE: leds[0] = CRGB::Black; break;
@@ -323,10 +330,44 @@ inline void updateLeds() {
       leds[0] = (cycle==0)?CRGB::Red: (cycle==1)?CRGB::Green: CRGB::Blue;
     } break;
     case EASTER_EGG_2:
-      leds[0] = CRGB::HotPink; // Or any color you like
+      leds[0] = CRGB::HotPink; 
       break;
     case CONFIG_MODE: leds[0] = CRGB::DeepPink; break;
     default: break;
   }
+
+  // --- 2. EXTERIOR STRIP (Indices 1 to NUM_LEDS-1) ---
+  if (NUM_LEDS > 1) {
+    // A. EXPLOSION STROBE (White Flash)
+    // FIX: Only strobe during the sequence (PRE_EXPLOSION), stop once EXPLODED
+    if (currentState == PRE_EXPLOSION) {
+       uint32_t elapsed = millis() - stateEntryTimestamp;
+       // Strobe starts at 3800ms (just before pop) and lasts 2 seconds
+       if (elapsed > 3800 && elapsed < 6000) {
+          bool flash = (millis() / 50) % 2; 
+          fill_solid(leds + 1, NUM_LEDS - 1, flash ? CRGB::White : CRGB::Black);
+       } else {
+          fill_solid(leds + 1, NUM_LEDS - 1, CRGB::Black);
+       }
+    }
+    // B. DOOM MODE (Red Chase)
+    else if (currentState == ARMED && doomModeActive) {
+       static uint16_t startIdx = 1;
+       static uint32_t lastMove = 0;
+       if (millis() - lastMove > 30) { 
+         lastMove = millis();
+         startIdx++;
+         if (startIdx >= NUM_LEDS) startIdx = 1;
+       }
+       
+       fadeToBlackBy(leds + 1, NUM_LEDS - 1, 60);
+       if (startIdx < NUM_LEDS) leds[startIdx] = CRGB::Red;
+    }
+    // C. DEFAULT (Off)
+    else {
+       fill_solid(leds + 1, NUM_LEDS - 1, CRGB::Black);
+    }
+  }
+
   FastLED.show();
 }

@@ -1,6 +1,5 @@
 // Game.h
-//VERSION: 3.0.0
-// 10.26.2025
+// VERSION: 3.3.0
 
 #pragma once
 #include <Arduino.h>
@@ -10,6 +9,10 @@
 #include "Utils.h"
 #include "Network.h"
 #include "C4Net.h"
+#include "PlantSensor.h"
+
+// Global Flag for Doom Mode
+bool doomModeActive = false;
 
 inline bool parseIpFromBuffer(const char* buf, uint32_t& out) {
   int a,b,c,d;
@@ -22,6 +25,28 @@ inline bool parseIpFromBuffer(const char* buf, uint32_t& out) {
 }
 
 inline void handleArmSwitch() {
+  // --- SUDDEN DEATH MODE LOGIC ---
+  if (settings.sudden_death_mode) {
+    if (armSwitch.rose()) { 
+       if (currentState == STANDBY || currentState == PROP_IDLE) {
+          if (!isBombPlanted()) {
+             myDFPlayer.play(SOUND_MENU_CANCEL);
+             return;
+          }
+          // Arm Immediately
+          bombArmedTimestamp = millis();
+          myDFPlayer.play(SOUND_BOMB_PLANTED);
+          setState(ARMED);
+       }
+    } else if (armSwitch.fell()) { 
+       if (currentState == ARMED) {
+          setState(DISARMED);
+       }
+    }
+    return; // Skip normal logic
+  }
+
+  // --- NORMAL LOGIC ---
   if (armSwitch.rose()) {
     if (currentState == DISARMED || currentState == EXPLODED || currentState == PROP_IDLE || currentState == AWAIT_ARM_TOGGLE)
       setState(STANDBY);
@@ -46,13 +71,14 @@ inline void handleKeypadInput(char key) {
       if (strcmp(enteredCode, activeArmCode) == 0 || strcmp(enteredCode, MASTER_CODE) == 0) {
         setState(DISARMED);
       } else {
+        // Incorrect Code Penalty
         uint32_t elapsed = millis() - bombArmedTimestamp;
         uint32_t total   = settings.bomb_duration_ms;
         uint32_t remaining = (total > elapsed) ? (total - elapsed) : 0;
         uint32_t penalty = remaining / 2;
         if (remaining > 3000) bombArmedTimestamp -= penalty;
         uint32_t newRemaining = (remaining > penalty) ? (remaining - penalty) : 0;
-c4OnTimeCut(newRemaining);
+        c4OnTimeCut(newRemaining);
         menuCancel();
         setState(ARMED);
       }
@@ -68,32 +94,59 @@ c4OnTimeCut(newRemaining);
     }
   } else if (key == '#') {
     if (currentState == ARMING) {
-      if ((int)strlen(enteredCode) == CODE_LENGTH) {
-
-        if (!isBombPlanted()) {
+      
+      // 1. MUST PLANT CHECK
+      if (!isBombPlanted()) {
          centerPrintC("ERROR: MUST PLANT", 1);
          centerPrintC("ON SITE FIRST!", 2);
          myDFPlayer.play(SOUND_MENU_CANCEL);
-         delay(2000); // clear error message delay
+         delay(2000); 
          setState(PROP_IDLE);
          return; 
       }
 
-        strcpy(activeArmCode, enteredCode);
+      // 2. CHECK CODES
+      if (strcmp(enteredCode, "0451") == 0) {
+         // Track 20: somBitch
+         myDFPlayer.play(SOUND_SOM_BITCH); 
+         enteredCode[0] = '\0'; 
+      
+      } else if (strcmp(enteredCode, "14085") == 0) {
+         // Track 21: Metal Gear
+         myDFPlayer.play(SOUND_MGS_ALERT);
+         enteredCode[0] = '\0';
 
-        if (strcmp(enteredCode, "5318008") == 0) {
+      } else if (strcmp(enteredCode, "0000000") == 0) {
+         centerPrintC("TOO EASY", 1);
+         myDFPlayer.play(SOUND_LAME);
+         delay(1500);
+         enteredCode[0] = '\0';
+         setState(PROP_IDLE);
+
+      } else if (strcmp(enteredCode, "666666") == 0) { // DOOM MODE (6s)
+         doomModeActive = true;
+         strcpy(activeArmCode, enteredCode);
+         bombArmedTimestamp = millis();
+         // Track 22: Doom Slayer (Intro) -> Chains to 23
+         myDFPlayer.play(SOUND_DOOM_SLAYER); 
+         setState(ARMED);
+      
+      } else if (strcmp(enteredCode, "5318008") == 0) {
+          strcpy(activeArmCode, enteredCode);
           setState(EASTER_EGG_2);
 
-        } else if (strcmp(enteredCode, MASTER_CODE) == 0) {
+      } else if (strcmp(enteredCode, MASTER_CODE) == 0) {
+          strcpy(activeArmCode, enteredCode);
           setState(EASTER_EGG);
 
-        } else {
-        
-          bombArmedTimestamp = millis();
-          myDFPlayer.play(SOUND_BOMB_PLANTED);
-          c4OnEnterArmed();                 // ⬅ tell scoreboard: planted + duration
-          setState(ARMED);
-        }
+      } else if ((int)strlen(enteredCode) == CODE_LENGTH) {
+        // C. NORMAL ARMING
+        strcpy(activeArmCode, enteredCode);
+        bombArmedTimestamp = millis();
+        // Track 01: Bomb Planted
+        myDFPlayer.play(SOUND_BOMB_PLANTED);
+        c4OnEnterArmed();
+        setState(ARMED);
         
       } else {
         setState(PROP_IDLE);
@@ -113,6 +166,16 @@ inline void handleRfid() {
   if (!rfid.PICC_IsNewCardPresent()) return;
   if (!rfid.PICC_ReadCardSerial())   return;
 
+  // -- GOD MODE CARD CHECK --
+  uint8_t adminUID[] = {0xDE, 0xAD, 0xBE, 0xEF}; 
+  if (UIDUtil::equals_len_bytes(4, adminUID, rfid.uid.uidByte, rfid.uid.size)) {
+      myDFPlayer.play(SOUND_MENU_CONFIRM);
+      setState(STANDBY); 
+      rfid.PICC_HaltA();
+      rfid.PCD_StopCrypto1();
+      return;
+  }
+
   bool isAuthorized = false;
   for (int i = 0; i < settings.num_rfid_uids; i++) {
     if (UIDUtil::equals_len_bytes(settings.rfid_uids[i].len,
@@ -128,7 +191,6 @@ inline void handleRfid() {
   rfid.PCD_StopCrypto1();
 }
 
-// Countdown/tension beep — call this in ARMED and all disarm states
 inline void handleBeepLogic() {
   float t   = (millis() - bombArmedTimestamp) / 1000.0f;
   float bps = 1.05f * powf(1.039f, t);
@@ -146,16 +208,14 @@ inline void handleBeepLogic() {
   }
 }
 
-// ----------- MENU / CONFIG -----------
-
 inline void handleConfigMode(char key) {
   if (key) {
     displayNeedsUpdate = true;
-    menuClick();   // non-blocking menu beep
+    menuClick(); // Uses SOUND_KEY_PRESS (Track 3)
 
     switch(currentConfigState) {
       case MENU_MAIN: {
-        const int N = 6;
+        const int N = 8; 
         if (key == '2') configMenuIndex = (configMenuIndex - 1 + N) % N;
         if (key == '8') configMenuIndex = (configMenuIndex + 1) % N;
         if (key == '#') {
@@ -165,26 +225,22 @@ inline void handleConfigMode(char key) {
             case 0: currentConfigState = MENU_SET_BOMB_TIME; break;
             case 1: currentConfigState = MENU_SET_MANUAL_TIME; break;
             case 2: currentConfigState = MENU_SET_RFID_TIME; break;
-            case 3: rfidViewIndex = 0; currentConfigState = MENU_VIEW_RFIDS; break;
-            case 4: currentConfigState = MENU_NETWORK; break;
-            case 5: {
-  // Immediately show the screen, persist, and schedule reboot.
-  Serial.println("[CFG] Entering MENU_SAVE_EXIT screen");
-  currentConfigState = MENU_SAVE_EXIT;
-  displayNeedsUpdate = true;
-
-  bool ok = saveSettings();
-  Serial.printf("[CFG] saveSettings() returned %s\n", ok ? "true" : "false");
-
-  menuConfirm();                 // short beep; non-blocking
-  requestRestart(600);           // restartPump() will handle reboot
-} break;
-
+            case 3: currentConfigState = MENU_SUDDEN_DEATH_TOGGLE; break;
+            case 4: currentConfigState = MENU_DUD_SETTINGS; break;
+            case 5: rfidViewIndex = 0; currentConfigState = MENU_VIEW_RFIDS; break;
+            case 6: currentConfigState = MENU_NETWORK; break;
+            case 7: {
+              Serial.println("[CFG] Save Exit");
+              currentConfigState = MENU_SAVE_EXIT;
+              displayNeedsUpdate = true;
+              saveSettings();
+              menuConfirm();
+              requestRestart(600);
+            } break;
           }
         }
       } break;
 
-      // Time entries
       case MENU_SET_BOMB_TIME:
       case MENU_SET_MANUAL_TIME:
       case MENU_SET_RFID_TIME: {
@@ -209,14 +265,36 @@ inline void handleConfigMode(char key) {
         }
       } break;
 
-      // RFID list
+      case MENU_SUDDEN_DEATH_TOGGLE: {
+        if (key == '#') { settings.sudden_death_mode = !settings.sudden_death_mode; menuConfirm(); }
+        if (key == '*') currentConfigState = MENU_MAIN;
+      } break;
+
+      case MENU_DUD_SETTINGS: {
+        if (key == '#') { settings.dud_enabled = !settings.dud_enabled; menuConfirm(); }
+        if (key == '1') { configInputBuffer[0]='\0'; currentConfigState = MENU_DUD_CHANCE; }
+        if (key == '*') currentConfigState = MENU_MAIN;
+      } break;
+
+      case MENU_DUD_CHANCE: {
+        if (isdigit(key)) {
+          size_t len = strlen(configInputBuffer);
+          if (len + 1 < CONFIG_INPUT_MAX) { configInputBuffer[len] = key; configInputBuffer[len+1] = '\0'; }
+        }
+        if (key == '#') {
+          int val = atoi(configInputBuffer);
+          if (val >= 0 && val <= 100) { settings.dud_chance = val; menuConfirm(); }
+          currentConfigState = MENU_DUD_SETTINGS;
+        }
+        if (key == '*') currentConfigState = MENU_DUD_SETTINGS; 
+      } break;
+
       case MENU_VIEW_RFIDS: {
         int total = settings.num_rfid_uids + 2;
         if (key == '2') rfidViewIndex = (rfidViewIndex - 1 + total) % total;
         if (key == '8') rfidViewIndex = (rfidViewIndex + 1) % total;
         if (key == '#') {
           if (rfidViewIndex < settings.num_rfid_uids) {
-            // reserved (e.g., delete/replace)
           } else if (rfidViewIndex == settings.num_rfid_uids) {
             if (settings.num_rfid_uids < MAX_RFID_UIDS) currentConfigState = MENU_ADD_RFID;
             else menuCancel();
@@ -234,7 +312,6 @@ inline void handleConfigMode(char key) {
         if (key == '*') currentConfigState = MENU_VIEW_RFIDS;
       } break;
 
-      // Network submenu
       case MENU_NETWORK: {
         if (key == '1')      currentConfigState = MENU_NET_ENABLE;
         else if (key == '2') currentConfigState = MENU_NET_SERVER_MODE;
@@ -248,10 +325,10 @@ inline void handleConfigMode(char key) {
       } break;
 
       case MENU_NETWORK_2: {
-  if (key == '9') currentConfigState = MENU_NETWORK;
-  else if (key == '8') currentConfigState = MENU_NET_FORGET_CONFIRM;   // <<< NEW
-  else if (key == '*') currentConfigState = MENU_MAIN;
-} break;
+        if (key == '9') currentConfigState = MENU_NETWORK;
+        else if (key == '8') currentConfigState = MENU_NET_FORGET_CONFIRM; 
+        else if (key == '*') currentConfigState = MENU_MAIN;
+      } break;
 
       case MENU_NET_ENABLE: {
         if (key == '#') { settings.wifi_enabled = !settings.wifi_enabled; menuConfirm(); }
@@ -287,19 +364,18 @@ inline void handleConfigMode(char key) {
         }
       } break;
 
-case MENU_NET_FORGET_CONFIRM: {
-  if (key == '#') {
-    forgetWifiCredentials();   // from Network.h
-    menuConfirm();
-    currentConfigState = MENU_NETWORK;   // return to first network page
-    displayNeedsUpdate = true;
-  }
-  if (key == '*') {
-    currentConfigState = MENU_NETWORK_2; // back to page 2 without changes
-    displayNeedsUpdate = true;
-  }
-} break;
-
+      case MENU_NET_FORGET_CONFIRM: {
+        if (key == '#') {
+          forgetWifiCredentials(); 
+          menuConfirm();
+          currentConfigState = MENU_NETWORK; 
+          displayNeedsUpdate = true;
+        }
+        if (key == '*') {
+          currentConfigState = MENU_NETWORK_2; 
+          displayNeedsUpdate = true;
+        }
+      } break;
 
       case MENU_NET_PORT: {
         if (isdigit(key)) {
@@ -319,21 +395,18 @@ case MENU_NET_FORGET_CONFIRM: {
       } break;
 
       case MENU_NET_WIFI_SETUP: {
-        // Non-blocking portal runs in networkLoop()
         if (key == '*') { stopWiFiPortal(); currentConfigState = MENU_NETWORK; }
       } break;
 
       case MENU_NET_APPLY_NOW: {
-        // brief status; return automatically
         currentConfigState = MENU_NETWORK;
       } break;
 
-      case MENU_SAVE_EXIT: { /* no-op: screen is drawn by Display.h while we wait */ } break;
+      case MENU_SAVE_EXIT: { } break;
 
     }
   }
 
-  // Continuous actions in specific config states
   if (currentConfigState == MENU_ADD_RFID) {
     if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()) {
       if (rfid.uid.size <= 10) {
@@ -355,8 +428,6 @@ case MENU_NET_FORGET_CONFIRM: {
   }
 }
 
-// ----------- Tiny helper to call from .ino -----------
-// Keeps gameplay logic (including continuous beep) running per-state.
 inline void serviceGameplay(char key) {
   switch (currentState) {
     case PROP_IDLE:
@@ -368,25 +439,25 @@ inline void serviceGameplay(char key) {
       handleKeypadInput(key);
       handleDisarmButton();
       handleRfid();
-      handleBeepLogic();   // keep tension beep
+      handleBeepLogic();
       break;
 
     case ARMED:
       handleKeypadInput(key);
       handleDisarmButton();
       handleRfid();
-      handleBeepLogic();   // keep tension beep
+      handleBeepLogic();
       break;
 
     case DISARMING_MANUAL:
       handleDisarmButton();
-      handleBeepLogic();   // keep tension beep
+      handleBeepLogic();
       if (millis() - disarmStartTimestamp >= settings.manual_disarm_time_ms)
         setState(DISARMED);
       break;
 
     case DISARMING_RFID:
-      handleBeepLogic();   // keep tension beep
+      handleBeepLogic();
       if (millis() - disarmStartTimestamp >= settings.rfid_disarm_time_ms)
         setState(DISARMED);
       break;

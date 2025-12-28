@@ -1,5 +1,6 @@
 // Hardware.h
-//VERSION: 2.0.0
+//VERSION: 2.1.0
+// 12.28.2025
 
 #pragma once
 #include <Wire.h>
@@ -14,20 +15,25 @@
 #include "Pins.h"
 #include "Config.h"
 
+// --- LED CONFIGURATION ---
+// Index 0 = Status LED (Blinking)
+// Index 1..N = Exterior Strip
+#define NUM_LEDS 60 // Set this to your max count (e.g., 60, 100)
+
 // Externals defined in .ino
 extern hd44780_I2Cexp lcd;
 extern DFRobotDFPlayerMini myDFPlayer;
 extern MFRC522 rfid;
 extern Bounce2::Button disarmButton;
 extern Bounce2::Button armSwitch;
-extern CRGB leds[1];
+extern CRGB leds[NUM_LEDS];
 extern Keypad keypad;
 
 inline void initHardware() {
   // FastLED
-  FastLED.addLeds<NEOPIXEL, NEOPIXEL_PIN>(leds, 1);
+  FastLED.addLeds<NEOPIXEL, NEOPIXEL_PIN>(leds, NUM_LEDS); // Use NUM_LEDS
   FastLED.setBrightness(NEOPIXEL_BRIGHTNESS);
-  leds[0] = CRGB::Black;
+  fill_solid(leds, NUM_LEDS, CRGB::Black); // Clear all
   FastLED.show();
 
   // LCD

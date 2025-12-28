@@ -1,37 +1,37 @@
 // State.h
-//VERSION: 3.0.1
-//12.27.2025
+// VERSION: 3.3.3
+// FIXED: Explicitly disable DFPlayer Loop Mode for Doom transition
 
 #pragma once
 #include "Config.h"
 #include "Sounds.h"
 #include "Hardware.h"
-// DO NOT include Network.h here (breaks include order)
-// We only need the declaration for wsSendJson used below:
-void wsSendJson(const String& json);
+#include "ShellEjector.h"
 
+// Forward Declaration
+void wsSendJson(const String& json);
 #include "C4Net.h"
+
+// --- GLOBAL FLAGS ---
+extern bool doomModeActive;
 
 // Game states
 enum PropState { 
   STANDBY, AWAIT_ARM_TOGGLE, PROP_IDLE, ARMING, ARMED, DISARMING_KEYPAD, 
-  DISARMING_MANUAL, DISARMING_RFID, DISARMED, PRE_EXPLOSION, EXPLODED, EASTER_EGG, EASTER_EGG_2,
+  DISARMING_MANUAL, DISARMING_RFID, DISARMED, PRE_EXPLOSION, EXPLODED, 
+  EASTER_EGG, EASTER_EGG_2,
   CONFIG_MODE
 };
 
 // Config/menu states
 enum ConfigState {
   MENU_MAIN, MENU_SET_BOMB_TIME, MENU_SET_MANUAL_TIME, MENU_SET_RFID_TIME,
+  MENU_SUDDEN_DEATH_TOGGLE, MENU_DUD_SETTINGS, MENU_DUD_CHANCE,
   MENU_VIEW_RFIDS, MENU_ADD_RFID, MENU_CLEAR_RFIDS_CONFIRM, MENU_NET_FORGET_CONFIRM, MENU_SAVE_EXIT,
-  // Network submenu
   MENU_NETWORK, MENU_NET_ENABLE, MENU_NET_SERVER_MODE, MENU_NET_IP, MENU_NET_PORT, MENU_NET_MASTER_IP,
-  MENU_NET_WIFI_SETUP, MENU_NET_SAVE_BACK,
-  // NEW in 2.0.1/2
-  MENU_NETWORK_2,
-  MENU_NET_APPLY_NOW
+  MENU_NET_WIFI_SETUP, MENU_NET_SAVE_BACK, MENU_NETWORK_2, MENU_NET_APPLY_NOW
 };
 
-// Externs defined in .ino
 extern PropState currentState;
 extern ConfigState currentConfigState;
 
@@ -72,22 +72,26 @@ inline const char* getStateName(PropState state) {
 
 inline void netNotifyState(const char* s) {
   String json = String("{\"type\":\"state\",\"value\":\"") + s + "\"}";
-  wsSendJson(json); // comes from Network.h, but only needs a declaration here
-   // Also tell the scoreboard about bomb-critical transitions:
-  if      (strcmp(s, "DISARMED") == 0) { c4OnEnterDisarmed(); }
+  wsSendJson(json); 
+  if (strcmp(s, "DISARMED") == 0) { c4OnEnterDisarmed(); }
   else if (strcmp(s, "EXPLODED") == 0) { c4OnEnterExploded(); }
 }
 
 inline void setState(PropState newState) {
   if (currentState == newState) return;
+  PropState oldState = currentState;
   currentState = newState;
   stateEntryTimestamp = millis();
   displayNeedsUpdate = true;
-  Serial.printf("State changed to: %s\n", getStateName(newState));
   netNotifyState(getStateName(newState));
 
   enteredCode[0] = '\0';
-   // Only silence the beeper in terminal/non-tension states
+  
+  if (newState == STANDBY || newState == PROP_IDLE) {
+    doomModeActive = false;
+  }
+
+  // Silence beeper in terminal states
   switch (newState) {
     case DISARMED:
     case PRE_EXPLOSION:
@@ -96,75 +100,111 @@ inline void setState(PropState newState) {
     case AWAIT_ARM_TOGGLE:
       beepStop();
       break;
-    default: /* keep beeper running */ break;
+    default: break;
   }
 
   switch (newState) {
     case PROP_IDLE:
-      myDFPlayer.play(SOUND_ARM_SWITCH);
+      myDFPlayer.play(SOUND_ARM_SWITCH_ON);
       break;
+
+    case STANDBY:
+      if (oldState != AWAIT_ARM_TOGGLE) {
+        myDFPlayer.play(SOUND_ARM_SWITCH_OFF);
+      }
+      break;
+
     case DISARMING_MANUAL:
     case DISARMING_RFID:
       disarmStartTimestamp = millis();
       myDFPlayer.play(SOUND_DISARM_BEGIN);
       break;
+
     case DISARMED:
-      myDFPlayer.play(SOUND_DISARM_COMPLETE);
-      nextTrackToPlay = SOUND_BOMB_DEFUSED;
+      myDFPlayer.play(SOUND_DISARM_SUCCESS_1);
+      nextTrackToPlay = SOUND_DISARM_SUCCESS_2; 
       break;
+
     case PRE_EXPLOSION:
+      // FIX: Explicitly disable the hardware loop flag.
+      // Calling play() changes the track but does NOT always clear the loop mode.
+      myDFPlayer.disableLoop(); 
+      delay(50); // Give the chip a moment to process the config change
+      myDFPlayer.stop(); 
+      delay(50); 
+      
+      doomModeActive = false; 
+      
       myDFPlayer.play(SOUND_DETONATION_NEW);
-      startShellEjectorSequence();
+      startShellEjectorSequence(); 
       break;
+      
+    case EXPLODED:
+      // Safety: Disable loop here too
+      myDFPlayer.disableLoop();
+      break;
+
     case EASTER_EGG:
       myDFPlayer.play(random(SOUND_EASTER_EGG_START, SOUND_EASTER_EGG_END + 1));
       break;
 
     case EASTER_EGG_2:
-      myDFPlayer.play(random(SOUND_EASTER_EGG_2_START, SOUND_EASTER_EGG_2_END + 1));
+      myDFPlayer.play(SOUND_JUGS); 
       break;
+      
     default: break;
   }
 }
 
 inline void printDetail(uint8_t type, int value) {
-  switch (type) {
-    case DFPlayerPlayFinished: {
-      Serial.printf("Track %d Finished!\n", value);
-
-      // Handle new all-in-one explosion sound
-      if (value == SOUND_DETONATION_NEW) {
-        setState(EXPLODED); // Go to EXPLODED after new track finishes
-        nextTrackToPlay = 0;
-        break; // Stop further processing
-      }
-
-      // Handle Easter Egg 2 finish
-      // This checks if we are in EASTER_EGG_2 state AND the easter egg 2 sound just finished
-      if (currentState == EASTER_EGG_2 && 
-          (value >= SOUND_EASTER_EGG_2_START && value <= SOUND_EASTER_EGG_2_END)) {
-        
-        // Now, perform the normal arming sequence
-        bombArmedTimestamp = millis();
-        myDFPlayer.play(SOUND_BOMB_PLANTED);
-        c4OnEnterArmed();
-        setState(ARMED);
-        
-        nextTrackToPlay = 0; // Clear any other pending tracks
-        break; // Stop further processing
-      }
-      
-      // Old track-chaining logic
-      int track = nextTrackToPlay; nextTrackToPlay = 0;
-      if (track != 0) {
-        myDFPlayer.play(track);
-        // Old explosion chaining logic was removed here
-      }
-    } break; // <-- This closes the 'case DFPlayerPlayFinished:'
+  if (type == DFPlayerPlayFinished) {
+    Serial.printf("Track %d Finished!\n", value);
     
-    case DFPlayerError:
-      Serial.print(F("DFPlayerError:"));
-      break;
-    default: break;
+    // Safety: If we are already exploded, ignore further audio events 
+    if (currentState == EXPLODED) return;
+
+    // 1. Doom Logic
+    if (doomModeActive && value == SOUND_DOOM_SLAYER) {
+      myDFPlayer.loop(SOUND_DOOM_MUSIC); 
+    }
+
+    // 2. Detonation -> Check for Dud
+    if (value == SOUND_DETONATION_NEW) {
+      bool isDud = false;
+      if (settings.dud_enabled) {
+        if (random(0, 100) < settings.dud_chance) isDud = true;
+      }
+
+      if (isDud) {
+        myDFPlayer.play(SOUND_DUD_FAIL); 
+      } else {
+        setState(EXPLODED); 
+        nextTrackToPlay = 0;
+      }
+      return; 
+    }
+
+    // 3. Dud Sound Finished
+    if (value == SOUND_DUD_FAIL) {
+       setState(EXPLODED); 
+       nextTrackToPlay = 0;
+       return;
+    }
+
+    // 4. Easter Egg 2 (Jugs)
+    if (currentState == EASTER_EGG_2 && value == SOUND_JUGS) {
+       bombArmedTimestamp = millis();
+       myDFPlayer.play(SOUND_BOMB_PLANTED);
+       c4OnEnterArmed();
+       setState(ARMED);
+       nextTrackToPlay = 0;
+       return;
+    }
+    
+    // 5. Standard chaining
+    int track = nextTrackToPlay; nextTrackToPlay = 0;
+    if (track != 0) {
+      myDFPlayer.play(track);
+    }
   }
 }

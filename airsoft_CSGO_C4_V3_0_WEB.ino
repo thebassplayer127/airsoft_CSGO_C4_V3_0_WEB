@@ -1,7 +1,7 @@
 /*
   PROJECT: Counter-Strike C4 Prop (Project 2)
-  VERSION: 3.0.1
-  DATE: 2025-12-27
+  VERSION: 3.1.0
+  DATE: 2025-12-28
   AUTHOR: Andrew Florio
 
   Header-only modular structure for Arduino IDE, with Wi-Fi + mDNS + WebSocket.
@@ -35,7 +35,7 @@ DFRobotDFPlayerMini myDFPlayer;
 MFRC522 rfid(RFID_SDA_PIN, RFID_RST_PIN);
 Bounce2::Button disarmButton = Bounce2::Button();
 Bounce2::Button armSwitch = Bounce2::Button();
-CRGB leds[1];
+CRGB leds[NUM_LEDS];
 Keypad keypad = Keypad(makeKeymap(KEYS), ROW_PINS, COL_PINS, KEYPAD_ROWS, KEYPAD_COLS);
 
 // State and config globals
