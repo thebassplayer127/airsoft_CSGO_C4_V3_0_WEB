@@ -1,5 +1,6 @@
 // Pins.h
-//VERSION: 2.0.0
+//VERSION: 2.0.1
+// 12.27.2025
 
 #pragma once
 #include <Arduino.h>
@@ -15,6 +16,8 @@
 #define RFID_MISO_PIN       D12
 #define RFID_SCK_PIN        D13
 #define BEEP_BUZZER_PIN     A7
+#define SERVO_PIN           A2  // For Shell Ejector
+#define HALL_SENSOR_PIN     A3  // For Plant Detection
 
 // Keypad
 static const byte KEYPAD_ROWS = 4;

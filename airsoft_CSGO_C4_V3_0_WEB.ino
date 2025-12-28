@@ -1,7 +1,7 @@
 /*
   PROJECT: Counter-Strike C4 Prop (Project 2)
-  VERSION: 3.0.0
-  DATE: 2025-10-26
+  VERSION: 3.0.1
+  DATE: 2025-12-27
   AUTHOR: Andrew Florio
 
   Header-only modular structure for Arduino IDE, with Wi-Fi + mDNS + WebSocket.
@@ -9,15 +9,17 @@
 */
 
 #include <Arduino.h>
+#include "Pins.h"
 #include "Config.h"
-#include "State.h"
+#include "Sounds.h"
+#include "ShellEjector.h"
+#include "PlantSensor.h"
 #include "Hardware.h"
+#include "State.h"
 #include "Utils.h"
 #include "Display.h"
-#include "Game.h"
 #include "Network.h"
-#include "Pins.h"
-#include "Sounds.h"
+#include "Game.h"
 
 // ---- Default (weak) WS inbound handler ----
 // Place in Game.h (bottom) OR in your .ino after includes (exactly once).
@@ -111,6 +113,10 @@ void setup() {
   }
 
   Serial.println("Setup complete.");
+
+initShellEjector();
+initPlantSensor();
+
 }
 
 void loop() {
@@ -195,7 +201,7 @@ void loop() {
   updateLeds();
   menuBeepPump();   // keep menu beeps short & non-blocking
   restartPump();    // perform any scheduled reboot safely
-
+  updateShellEjector(); // Checks servo timing every loop
   // Network pump last to keep UI snappy; portal still gets serviced inside.
   networkLoop();
 

@@ -1,6 +1,6 @@
 // State.h
-//VERSION: 3.0.0
-//10.26.2025
+//VERSION: 3.0.1
+//12.27.2025
 
 #pragma once
 #include "Config.h"
@@ -114,6 +114,7 @@ inline void setState(PropState newState) {
       break;
     case PRE_EXPLOSION:
       myDFPlayer.play(SOUND_DETONATION_NEW);
+      startShellEjectorSequence();
       break;
     case EASTER_EGG:
       myDFPlayer.play(random(SOUND_EASTER_EGG_START, SOUND_EASTER_EGG_END + 1));

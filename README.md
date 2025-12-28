@@ -1,6 +1,14 @@
 // README.h
 //VERSION: 3.0.0
 
+//
+7355608	Master Code (CS:GO): Arms the bomb but triggers the EASTER_EGG state. Plays a random "hidden" sound track (Tracks 11–14) instead of the standard arming noise.
+5318008	Calculator Joke: Triggers EASTER_EGG_2. Plays the "Jugs" sound effect (Track 18) and then proceeds to arm the bomb normally.
+0451	Immersive Sim Ref: Plays the "Access Denied" sound (from Deus Ex/Bioshock) without arming.
+14085	MGS Codec: Plays the Metal Gear Solid "Alert (!)" sound without arming.
+0000000	Lazy Code: Mocks the user by displaying "TOO EASY" and playing an error beep.
+666	Sudden Death Mode: Arms the bomb instantly with a 10-second timer for a tie-breaker round.
+
 # C4 Prop — Header-Only + Network (Arduino IDE)
 
 **Version:** v3.0.0

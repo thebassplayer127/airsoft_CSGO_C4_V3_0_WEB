@@ -69,6 +69,16 @@ c4OnTimeCut(newRemaining);
   } else if (key == '#') {
     if (currentState == ARMING) {
       if ((int)strlen(enteredCode) == CODE_LENGTH) {
+
+        if (!isBombPlanted()) {
+         centerPrintC("ERROR: MUST PLANT", 1);
+         centerPrintC("ON SITE FIRST!", 2);
+         myDFPlayer.play(SOUND_MENU_CANCEL);
+         delay(2000); // clear error message delay
+         setState(PROP_IDLE);
+         return; 
+      }
+
         strcpy(activeArmCode, enteredCode);
 
         if (strcmp(enteredCode, "5318008") == 0) {
