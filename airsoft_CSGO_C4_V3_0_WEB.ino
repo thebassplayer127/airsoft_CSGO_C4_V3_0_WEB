@@ -1,32 +1,34 @@
 /*
   PROJECT: Counter-Strike C4 Prop (Project 2)
-  VERSION: 3.1.0
-  DATE: 2025-12-28
+  VERSION: 3.4.0
+  DATE: 2025-10-26
   AUTHOR: Andrew Florio
 
   Header-only modular structure for Arduino IDE, with Wi-Fi + mDNS + WebSocket.
-  DFPlayer remains on Serial0 per wiring (Arduino Nano ESP32).
 */
 
 #include <Arduino.h>
+
+// 1. Basic Definitions (Must come first)
 #include "Pins.h"
 #include "Config.h"
 #include "Sounds.h"
-#include "ShellEjector.h"
-#include "PlantSensor.h"
-#include "Hardware.h"
-#include "State.h"
+
+// 2. New Modules
+#include "ShellEjector.h"  
+#include "PlantSensor.h"   
+
+// 3. Core Logic
+#include "Hardware.h" // Defines NUM_LEDS
+#include "State.h"         
 #include "Utils.h"
 #include "Display.h"
 #include "Network.h"
-#include "Game.h"
+#include "Game.h"          
 
 // ---- Default (weak) WS inbound handler ----
-// Place in Game.h (bottom) OR in your .ino after includes (exactly once).
 __attribute__((weak)) void handleInboundWsMessage(const char* msg) {
-  // For now just log what came in.
   Serial.printf("[WS] RX: %s\n", msg ? msg : "(null)");
-  // TODO: parse JSON or commands here if needed.
 }
 
 // ---- Define globals declared in headers ----
@@ -35,7 +37,9 @@ DFRobotDFPlayerMini myDFPlayer;
 MFRC522 rfid(RFID_SDA_PIN, RFID_RST_PIN);
 Bounce2::Button disarmButton = Bounce2::Button();
 Bounce2::Button armSwitch = Bounce2::Button();
-CRGB leds[NUM_LEDS];
+
+CRGB leds[NUM_LEDS]; 
+
 Keypad keypad = Keypad(makeKeymap(KEYS), ROW_PINS, COL_PINS, KEYPAD_ROWS, KEYPAD_COLS);
 
 // State and config globals
@@ -54,7 +58,6 @@ int configMenuIndex = 0;
 char configInputBuffer[CONFIG_INPUT_MAX] = "";
 int rfidViewIndex = 0;
 volatile uint32_t g_restartAtMs = 0;   // for Utils.h deferred restart
-
 
 // Codes
 char enteredCode[CODE_LENGTH + 1] = "";
@@ -96,7 +99,10 @@ void setup() {
     displayNeedsUpdate = true;
   }
 
-  initHardware(); // LCD, FastLED, SPI/I2C, RFID, DFPlayer, buttons, beeper
+  initHardware(); 
+  // Initialize new modules
+  initShellEjector();
+  initPlantSensor();
 
   // Boot screen with version
   lcd.clear();
@@ -113,15 +119,18 @@ void setup() {
   }
 
   Serial.println("Setup complete.");
-
-initShellEjector();
-initPlantSensor();
-
 }
 
 void loop() {
   char key = keypad.getKey();
 
+  // 1. Service Audio Events (MOVED OUTSIDE 'else')
+  // This allows the DFPlayer to report track finished events even in CONFIG_MODE
+  if (myDFPlayer.available()) {
+    printDetail(myDFPlayer.readType(), myDFPlayer.read());
+  }
+
+  // 2. State Logic
   if (currentState == CONFIG_MODE) {
     handleConfigMode(key);
   } else {
@@ -129,80 +138,26 @@ void loop() {
     armSwitch.update();
     handleArmSwitch();
 
-    if (myDFPlayer.available()) {
-      printDetail(myDFPlayer.readType(), myDFPlayer.read());
-    }
-
+    // Timer Logic
     if (currentState >= ARMED && currentState < DISARMED) {
       if (millis() - bombArmedTimestamp >= settings.bomb_duration_ms) setState(PRE_EXPLOSION);
     }
 
-    // Explosion safety guard in case DFPlayer events are missed
+    // Explosion safety guard 
     if (currentState == PRE_EXPLOSION) {
       uint32_t since = millis() - stateEntryTimestamp;
-      if (since > (PRE_EXPLOSION_FADE_MS + 1200)) {
-      }
-      if (since > (PRE_EXPLOSION_FADE_MS + 10000)) setState(EXPLODED); // 10s safety
+      if (since > (PRE_EXPLOSION_FADE_MS + 10000)) setState(EXPLODED); 
     }
 
-    switch (currentState) {
-      case PROP_IDLE:
-      case ARMING:
-        handleKeypadInput(key);
-        break;
-
-      case DISARMING_KEYPAD:
-        handleKeypadInput(key);
-        handleDisarmButton();
-        handleRfid();
-        handleBeepLogic();  // <<< keep tension beep while keypad-disarming
-        break;
-
-      case ARMED:
-        handleKeypadInput(key);
-        handleDisarmButton();
-        handleRfid();
-        handleBeepLogic();
-        break;
-
-      case DISARMING_MANUAL:
-        handleDisarmButton();
-        handleBeepLogic();  // <<< keep tension beep while manual-disarming
-        if (millis() - disarmStartTimestamp >= settings.manual_disarm_time_ms) setState(DISARMED);
-        break;
-
-      case DISARMING_RFID:
-        handleBeepLogic();  // <<< keep tension beep while RFID-disarming
-        if (millis() - disarmStartTimestamp >= settings.rfid_disarm_time_ms) setState(DISARMED);
-        break;
-
-      case EASTER_EGG:
-        if (millis() - stateEntryTimestamp > EASTER_EGG_DURATION_MS) {
-          bombArmedTimestamp = millis();
-          myDFPlayer.play(SOUND_BOMB_PLANTED);
-          setState(ARMED);
-        }
-        break;
-
-        case EASTER_EGG_2:
-        if (millis() - stateEntryTimestamp > 10000) {
-          bombArmedTimestamp = millis();
-          myDFPlayer.play(SOUND_BOMB_PLANTED);
-          c4OnEnterArmed(); // Make sure to call this!
-          setState(ARMED);
-        }
-        break;
-
-      default: break;
-    }
+    // Unified gameplay handler
+    serviceGameplay(key);
   }
 
   updateDisplay();
   updateLeds();
-  menuBeepPump();   // keep menu beeps short & non-blocking
-  restartPump();    // perform any scheduled reboot safely
-  updateShellEjector(); // Checks servo timing every loop
-  // Network pump last to keep UI snappy; portal still gets serviced inside.
+  menuBeepPump();   
+  restartPump();    
+  updateShellEjector(); // Checks servo timing
   networkLoop();
 
   delay(1);

@@ -1,5 +1,6 @@
 // Game.h
-// VERSION: 3.3.0
+// VERSION: 3.9.0
+// FIXED: Codes 0451 and 14085 now ARM the bomb (with special SFX)
 
 #pragma once
 #include <Arduino.h>
@@ -71,7 +72,6 @@ inline void handleKeypadInput(char key) {
       if (strcmp(enteredCode, activeArmCode) == 0 || strcmp(enteredCode, MASTER_CODE) == 0) {
         setState(DISARMED);
       } else {
-        // Incorrect Code Penalty
         uint32_t elapsed = millis() - bombArmedTimestamp;
         uint32_t total   = settings.bomb_duration_ms;
         uint32_t remaining = (total > elapsed) ? (total - elapsed) : 0;
@@ -105,50 +105,59 @@ inline void handleKeypadInput(char key) {
          return; 
       }
 
-      // 2. CHECK CODES
+      // 2. CHECK CODES (Order Matters: Check specifics first, then general length)
+      
+      // A. Short/Special Codes (NOW ARMING)
       if (strcmp(enteredCode, "0451") == 0) {
-         // Track 20: somBitch
+         // Arms with Bioshock/Deus Ex Sound
+         strcpy(activeArmCode, enteredCode);
+         bombArmedTimestamp = millis();
          myDFPlayer.play(SOUND_SOM_BITCH); 
-         enteredCode[0] = '\0'; 
+         c4OnEnterArmed();
+         setState(ARMED);
       
       } else if (strcmp(enteredCode, "14085") == 0) {
-         // Track 21: Metal Gear
+         // Arms with MGS Alert Sound
+         strcpy(activeArmCode, enteredCode);
+         bombArmedTimestamp = millis();
          myDFPlayer.play(SOUND_MGS_ALERT);
-         enteredCode[0] = '\0';
+         c4OnEnterArmed();
+         setState(ARMED);
 
       } else if (strcmp(enteredCode, "0000000") == 0) {
+         // "Too Easy" -> Still rejects arming (mockery code)
          centerPrintC("TOO EASY", 1);
          myDFPlayer.play(SOUND_LAME);
          delay(1500);
          enteredCode[0] = '\0';
          setState(PROP_IDLE);
 
-      } else if (strcmp(enteredCode, "666666") == 0) { // DOOM MODE (6s)
+      // B. Easter Egg Modes (These transition state)
+      } else if (strcmp(enteredCode, "666666") == 0) { // DOOM MODE
          doomModeActive = true;
          strcpy(activeArmCode, enteredCode);
          bombArmedTimestamp = millis();
-         // Track 22: Doom Slayer (Intro) -> Chains to 23
          myDFPlayer.play(SOUND_DOOM_SLAYER); 
          setState(ARMED);
       
       } else if (strcmp(enteredCode, "5318008") == 0) {
           strcpy(activeArmCode, enteredCode);
-          setState(EASTER_EGG_2);
+          setState(EASTER_EGG_2); // Handles its own arming transition
 
       } else if (strcmp(enteredCode, MASTER_CODE) == 0) {
           strcpy(activeArmCode, enteredCode);
-          setState(EASTER_EGG);
+          setState(EASTER_EGG); // Handles its own flow
 
+      // C. Normal Arming (Strict 7-digit check)
       } else if ((int)strlen(enteredCode) == CODE_LENGTH) {
-        // C. NORMAL ARMING
         strcpy(activeArmCode, enteredCode);
         bombArmedTimestamp = millis();
-        // Track 01: Bomb Planted
         myDFPlayer.play(SOUND_BOMB_PLANTED);
         c4OnEnterArmed();
         setState(ARMED);
         
       } else {
+        // If code is not special AND not 7 digits, reject it
         setState(PROP_IDLE);
       }
     }
@@ -192,8 +201,14 @@ inline void handleRfid() {
 }
 
 inline void handleBeepLogic() {
-  float t   = (millis() - bombArmedTimestamp) / 1000.0f;
-  float bps = 1.05f * powf(1.039f, t);
+  // Beep Logic Scaled by Bomb Duration
+  uint32_t elapsed = millis() - bombArmedTimestamp;
+  if (elapsed > settings.bomb_duration_ms) elapsed = settings.bomb_duration_ms;
+
+  float progress = (float)elapsed / (float)settings.bomb_duration_ms;
+  float virtual_t = progress * 45.0f; 
+
+  float bps = 1.05f * powf(1.039f, virtual_t);
   uint32_t interval = (uint32_t)(1000.0f / bps);
 
   if (millis() - lastBeepTimestamp >= interval) {
@@ -211,7 +226,7 @@ inline void handleBeepLogic() {
 inline void handleConfigMode(char key) {
   if (key) {
     displayNeedsUpdate = true;
-    menuClick(); // Uses SOUND_KEY_PRESS (Track 3)
+    myDFPlayer.play(SOUND_KEY_PRESS); 
 
     switch(currentConfigState) {
       case MENU_MAIN: {
@@ -219,7 +234,7 @@ inline void handleConfigMode(char key) {
         if (key == '2') configMenuIndex = (configMenuIndex - 1 + N) % N;
         if (key == '8') configMenuIndex = (configMenuIndex + 1) % N;
         if (key == '#') {
-          menuConfirm();
+          myDFPlayer.play(SOUND_MENU_CONFIRM);
           configInputBuffer[0] = '\0';
           switch (configMenuIndex) {
             case 0: currentConfigState = MENU_SET_BOMB_TIME; break;
@@ -234,7 +249,7 @@ inline void handleConfigMode(char key) {
               currentConfigState = MENU_SAVE_EXIT;
               displayNeedsUpdate = true;
               saveSettings();
-              menuConfirm();
+              myDFPlayer.play(SOUND_MENU_CONFIRM);
               requestRestart(600);
             } break;
           }
@@ -259,19 +274,19 @@ inline void handleConfigMode(char key) {
             if (currentConfigState == MENU_SET_BOMB_TIME)   settings.bomb_duration_ms = v;
             if (currentConfigState == MENU_SET_MANUAL_TIME) settings.manual_disarm_time_ms = v;
             if (currentConfigState == MENU_SET_RFID_TIME)   settings.rfid_disarm_time_ms = v;
-            menuConfirm();
-          } else menuCancel();
+            myDFPlayer.play(SOUND_MENU_CONFIRM);
+          } else myDFPlayer.play(SOUND_MENU_CANCEL);
           currentConfigState = MENU_MAIN;
         }
       } break;
 
       case MENU_SUDDEN_DEATH_TOGGLE: {
-        if (key == '#') { settings.sudden_death_mode = !settings.sudden_death_mode; menuConfirm(); }
+        if (key == '#') { settings.sudden_death_mode = !settings.sudden_death_mode; myDFPlayer.play(SOUND_MENU_CONFIRM); }
         if (key == '*') currentConfigState = MENU_MAIN;
       } break;
 
       case MENU_DUD_SETTINGS: {
-        if (key == '#') { settings.dud_enabled = !settings.dud_enabled; menuConfirm(); }
+        if (key == '#') { settings.dud_enabled = !settings.dud_enabled; myDFPlayer.play(SOUND_MENU_CONFIRM); }
         if (key == '1') { configInputBuffer[0]='\0'; currentConfigState = MENU_DUD_CHANCE; }
         if (key == '*') currentConfigState = MENU_MAIN;
       } break;
@@ -283,7 +298,7 @@ inline void handleConfigMode(char key) {
         }
         if (key == '#') {
           int val = atoi(configInputBuffer);
-          if (val >= 0 && val <= 100) { settings.dud_chance = val; menuConfirm(); }
+          if (val >= 0 && val <= 100) { settings.dud_chance = val; myDFPlayer.play(SOUND_MENU_CONFIRM); }
           currentConfigState = MENU_DUD_SETTINGS;
         }
         if (key == '*') currentConfigState = MENU_DUD_SETTINGS; 
@@ -297,7 +312,7 @@ inline void handleConfigMode(char key) {
           if (rfidViewIndex < settings.num_rfid_uids) {
           } else if (rfidViewIndex == settings.num_rfid_uids) {
             if (settings.num_rfid_uids < MAX_RFID_UIDS) currentConfigState = MENU_ADD_RFID;
-            else menuCancel();
+            else myDFPlayer.play(SOUND_MENU_CANCEL);
           } else {
             currentConfigState = MENU_CLEAR_RFIDS_CONFIRM;
           }
@@ -308,7 +323,7 @@ inline void handleConfigMode(char key) {
       case MENU_ADD_RFID: { if (key == '*') currentConfigState = MENU_VIEW_RFIDS; } break;
 
       case MENU_CLEAR_RFIDS_CONFIRM: {
-        if (key == '#') { settings.num_rfid_uids = 0; menuConfirm(); currentConfigState = MENU_VIEW_RFIDS; }
+        if (key == '#') { settings.num_rfid_uids = 0; myDFPlayer.play(SOUND_MENU_CONFIRM); currentConfigState = MENU_VIEW_RFIDS; }
         if (key == '*') currentConfigState = MENU_VIEW_RFIDS;
       } break;
 
@@ -331,12 +346,12 @@ inline void handleConfigMode(char key) {
       } break;
 
       case MENU_NET_ENABLE: {
-        if (key == '#') { settings.wifi_enabled = !settings.wifi_enabled; menuConfirm(); }
+        if (key == '#') { settings.wifi_enabled = !settings.wifi_enabled; myDFPlayer.play(SOUND_MENU_CONFIRM); }
         if (key == '*') currentConfigState = MENU_NETWORK;
       } break;
 
       case MENU_NET_SERVER_MODE: {
-        if (key == '#') { settings.net_use_mdns = !settings.net_use_mdns; menuConfirm(); }
+        if (key == '#') { settings.net_use_mdns = !settings.net_use_mdns; myDFPlayer.play(SOUND_MENU_CONFIRM); }
         if (key == '*') currentConfigState = MENU_NETWORK;
       } break;
 
@@ -356,10 +371,10 @@ inline void handleConfigMode(char key) {
           if (parseIpFromBuffer(configInputBuffer, ip)) {
             if (currentConfigState == MENU_NET_IP) settings.scoreboard_ip = ip;
             else settings.master_ip = ip;
-            menuConfirm();
+            myDFPlayer.play(SOUND_MENU_CONFIRM);
             currentConfigState = MENU_NETWORK;
           } else {
-            menuCancel();
+            myDFPlayer.play(SOUND_MENU_CANCEL);
           }
         }
       } break;
@@ -367,7 +382,7 @@ inline void handleConfigMode(char key) {
       case MENU_NET_FORGET_CONFIRM: {
         if (key == '#') {
           forgetWifiCredentials(); 
-          menuConfirm();
+          myDFPlayer.play(SOUND_MENU_CONFIRM);
           currentConfigState = MENU_NETWORK; 
           displayNeedsUpdate = true;
         }
@@ -389,8 +404,8 @@ inline void handleConfigMode(char key) {
         }
         if (key == '#') {
           unsigned long v = strtoul(configInputBuffer, nullptr, 10);
-          if (v > 0 && v <= 65535) { settings.scoreboard_port = (uint16_t)v; menuConfirm(); currentConfigState = MENU_NETWORK; }
-          else menuCancel();
+          if (v > 0 && v <= 65535) { settings.scoreboard_port = (uint16_t)v; myDFPlayer.play(SOUND_MENU_CONFIRM); currentConfigState = MENU_NETWORK; }
+          else myDFPlayer.play(SOUND_MENU_CANCEL);
         }
       } break;
 
@@ -415,13 +430,13 @@ inline void handleConfigMode(char key) {
           slot.len = rfid.uid.size;
           memcpy(slot.bytes, rfid.uid.uidByte, rfid.uid.size);
           settings.num_rfid_uids++;
-          menuConfirm();
+          myDFPlayer.play(SOUND_MENU_CONFIRM);
           String uid = String("Added: ") + UIDUtil::toHex(slot.bytes, slot.len);
           centerPrint(uid, 1);
           delay(600);
           currentConfigState = MENU_VIEW_RFIDS;
-        } else menuCancel();
-      } else menuCancel();
+        } else myDFPlayer.play(SOUND_MENU_CANCEL);
+      } else myDFPlayer.play(SOUND_MENU_CANCEL);
       rfid.PICC_HaltA(); rfid.PCD_StopCrypto1();
       displayNeedsUpdate = true;
     }

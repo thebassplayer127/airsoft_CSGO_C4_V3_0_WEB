@@ -1,6 +1,6 @@
 // State.h
-// VERSION: 3.3.3
-// FIXED: Explicitly disable DFPlayer Loop Mode for Doom transition
+// VERSION: 3.7.0
+// FIXED: Removed Loop from Doom Mode (Audio is long enough)
 
 #pragma once
 #include "Config.h"
@@ -126,10 +126,8 @@ inline void setState(PropState newState) {
       break;
 
     case PRE_EXPLOSION:
-      // FIX: Explicitly disable the hardware loop flag.
-      // Calling play() changes the track but does NOT always clear the loop mode.
-      myDFPlayer.disableLoop(); 
-      delay(50); // Give the chip a moment to process the config change
+      // FIX: Ensure clean audio transition
+      // We aren't using loop() anymore, but stopping ensures the long track cuts immediately.
       myDFPlayer.stop(); 
       delay(50); 
       
@@ -140,8 +138,6 @@ inline void setState(PropState newState) {
       break;
       
     case EXPLODED:
-      // Safety: Disable loop here too
-      myDFPlayer.disableLoop();
       break;
 
     case EASTER_EGG:
@@ -165,7 +161,8 @@ inline void printDetail(uint8_t type, int value) {
 
     // 1. Doom Logic
     if (doomModeActive && value == SOUND_DOOM_SLAYER) {
-      myDFPlayer.loop(SOUND_DOOM_MUSIC); 
+      // CHANGED: Use play() instead of loop() since track is long enough
+      myDFPlayer.play(SOUND_DOOM_MUSIC); 
     }
 
     // 2. Detonation -> Check for Dud

@@ -1,5 +1,6 @@
 // Display.h
-// VERSION: 3.3.2
+// VERSION: 3.5.1
+// FIXED: Restored 'flash' variable for readability
 
 #pragma once
 #include "State.h"
@@ -338,36 +339,36 @@ inline void updateLeds() {
 
   // --- 2. EXTERIOR STRIP (Indices 1 to NUM_LEDS-1) ---
   if (NUM_LEDS > 1) {
-    // A. EXPLOSION STROBE (White Flash)
-    // FIX: Only strobe during the sequence (PRE_EXPLOSION), stop once EXPLODED
+    // A. EXPLOSION STROBE (Chaotic White Flash)
     if (currentState == PRE_EXPLOSION) {
        uint32_t elapsed = millis() - stateEntryTimestamp;
-       // Strobe starts at 3800ms (just before pop) and lasts 2 seconds
-       if (elapsed > 3800 && elapsed < 6000) {
-          bool flash = (millis() / 50) % 2; 
+       // Delayed Start: 4500ms (to sync with servo pop)
+       if (elapsed > 4500 && elapsed < 6000) {
+          // Slowed down strobe: 100ms
+          bool flash = (millis() / 70) % 2; 
           fill_solid(leds + 1, NUM_LEDS - 1, flash ? CRGB::White : CRGB::Black);
        } else {
           fill_solid(leds + 1, NUM_LEDS - 1, CRGB::Black);
        }
     }
-    // B. DOOM MODE (Red Chase)
+    // B. DOOM MODE (Chaotic Hellfire)
     else if (currentState == ARMED && doomModeActive) {
-       static uint16_t startIdx = 1;
-       static uint32_t lastMove = 0;
-       if (millis() - lastMove > 30) { 
-         lastMove = millis();
-         startIdx++;
-         if (startIdx >= NUM_LEDS) startIdx = 1;
-       }
+       // 1. Fade everything slightly
+       fadeToBlackBy(leds + 1, NUM_LEDS - 1, 150);
        
-       fadeToBlackBy(leds + 1, NUM_LEDS - 1, 60);
-       if (startIdx < NUM_LEDS) leds[startIdx] = CRGB::Red;
+       // 2. Ignite random spots (Chaotic - 8 spots)
+       for(int i=0; i<50; i++) { 
+          int pos = random(1, NUM_LEDS);
+          int colorPick = random(10);
+          if (colorPick < 6) leds[pos] = CRGB::Red;
+          else if (colorPick < 9) leds[pos] = CRGB::OrangeRed;
+          else leds[pos] = CRGB::White; // Spark
+       }
     }
     // C. DEFAULT (Off)
     else {
        fill_solid(leds + 1, NUM_LEDS - 1, CRGB::Black);
     }
   }
-
   FastLED.show();
 }

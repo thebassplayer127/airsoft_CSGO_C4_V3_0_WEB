@@ -1,12 +1,12 @@
 // Config.h
-// VERSION: 3.2.0
+// VERSION: 3.4.0
 //12.28.2025
 #pragma once
 #include <Arduino.h>
 #include <EEPROM.h>
 
 // Version
-static const char* FW_VERSION = "3.2.0";
+static const char* FW_VERSION = "3.4.0";
 
 // EEPROM / Settings
 #define EEPROM_SIZE 512

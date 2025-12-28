@@ -1,6 +1,6 @@
 // ShellEjector.h
-// VERSION: 1.0.0
-// 12.27.2025
+// VERSION: 1.1.0
+// SYNCED: Delay matched to Display.h Strobe (4500ms)
 
 #pragma once
 #include <Arduino.h>
@@ -8,11 +8,15 @@
 #include "Pins.h"
 
 // --- CONFIGURATION ---
-// Adjust these to match your mechanical setup
+// Adjust these angles to match your specific mechanical setup
 static const int      SERVO_NEUTRAL_ANGLE   = 0;    // Resting position
 static const int      SERVO_TRIGGER_ANGLE   = 90;   // Angle to hit the shell
-static const uint32_t SERVO_TRIGGER_DELAY   = 4000; // Time (ms) to wait AFTER sound starts before hitting
-static const uint32_t SERVO_HOLD_TIME       = 300;  // How long (ms) to hold the hit before retracting
+
+// The "Drop" timing: How long after the explosion sound starts should it fire?
+// Updated to 4500 to match the delayed strobe light start.
+static const uint32_t SERVO_TRIGGER_DELAY   = 4500; 
+// How long to hold the servo in the "hit" position before retracting
+static const uint32_t SERVO_HOLD_TIME       = 300; 
 
 // Internal State
 Servo myServo;
@@ -21,7 +25,6 @@ static EjectorState ejectorState = EJECTOR_IDLE;
 static uint32_t ejectorTimer = 0;
 
 inline void initShellEjector() {
-  // Check if pin is defined to avoid errors if you haven't set it yet
 #ifdef SERVO_PIN
   myServo.attach(SERVO_PIN);
   myServo.write(SERVO_NEUTRAL_ANGLE);
@@ -35,25 +38,25 @@ inline void startShellEjectorSequence() {
   ejectorTimer = millis();
 }
 
-// Call this in your main loop()
+// Call this in your main loop() to handle the animation without blocking
 inline void updateShellEjector() {
   if (ejectorState == EJECTOR_IDLE) return;
 
   uint32_t elapsed = millis() - ejectorTimer;
 
-  // Phase 1: Waiting for the "Drop" in the audio
+  // Phase 1: Waiting for the beat drop
   if (ejectorState == EJECTOR_WAITING) {
     if (elapsed >= SERVO_TRIGGER_DELAY) {
       myServo.write(SERVO_TRIGGER_ANGLE);
       ejectorState = EJECTOR_EXTENDED;
-      ejectorTimer = millis(); // Reset timer for the hold phase
+      ejectorTimer = millis(); // Reset timer for hold phase
     }
   }
-  // Phase 2: Holding the trigger (pop the shell)
+  // Phase 2: Retracting after the hit
   else if (ejectorState == EJECTOR_EXTENDED) {
     if (elapsed >= SERVO_HOLD_TIME) {
       myServo.write(SERVO_NEUTRAL_ANGLE);
-      ejectorState = EJECTOR_IDLE; // Done
+      ejectorState = EJECTOR_IDLE; // Sequence complete
     }
   }
 }
