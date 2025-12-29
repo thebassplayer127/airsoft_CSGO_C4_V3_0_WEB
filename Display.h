@@ -1,6 +1,6 @@
 // Display.h
-// VERSION: 4.3.0
-// ADDED: Star Wars Pre-Game Visuals, Fixed Flashing
+// VERSION: 4.5.0
+// ADDED: Star Wars Pre-Game Visuals, Fixed Flashing, Easter Egg Lighting Persistence
 
 #pragma once
 #include "State.h"
@@ -322,7 +322,16 @@ inline void updateLeds() {
     case AWAIT_ARM_TOGGLE: leds[0] = CRGB::Black; break;
     case PROP_IDLE:
     case ARMING: leds[0] = CRGB::Yellow; break;
-    case ARMED: leds[0] = ledIsOn ? CRGB::Red : CRGB::Black; break;
+    case ARMED: 
+      if (easterEggActive) {
+        // Easter Egg Logic: Cycle colors if the flag is active
+        int cycle = (millis() / EASTER_EGG_CYCLE_MS) % 3;
+        leds[0] = (cycle==0)?CRGB::Red: (cycle==1)?CRGB::Green: CRGB::Blue;
+      } else {
+        // Standard Logic: Red Blink
+        leds[0] = ledIsOn ? CRGB::Red : CRGB::Black;
+      }
+      break;
     case DISARMING_KEYPAD:
     case DISARMING_MANUAL:
     case DISARMING_RFID: leds[0] = CRGB::Blue; break;
@@ -334,6 +343,7 @@ inline void updateLeds() {
     } break;
     case EXPLODED: leds[0] = CRGB::Red; break;
     case EASTER_EGG: {
+      // Logic handled in ARMED case via flag, but kept here for initial transition
       int cycle = (millis() / EASTER_EGG_CYCLE_MS) % 3;
       leds[0] = (cycle==0)?CRGB::Red: (cycle==1)?CRGB::Green: CRGB::Blue;
     } break;

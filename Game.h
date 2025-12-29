@@ -1,6 +1,6 @@
 // Game.h
-// VERSION: 4.4.0
-// FIXED: Master Code (7355608) triggers Easter Egg State + Arming
+// VERSION: 4.7.0
+// ADDED: Servo Test Code (999#)
 
 #pragma once
 #include <Arduino.h>
@@ -18,6 +18,7 @@ bool starWarsModeActive = false;
 bool terminatorModeActive = false;
 bool bondModeActive = false;
 bool suddenDeathActive = false;
+bool easterEggActive = false; 
 
 inline bool parseIpFromBuffer(const char* buf, uint32_t& out) {
   int a,b,c,d;
@@ -241,6 +242,16 @@ inline void handleKeypadInput(char key) {
       } else if (strcmp(enteredCode, "5318008") == 0) {
           strcpy(activeArmCode, enteredCode);
           setState(EASTER_EGG_2);
+
+      // --- SERVO TEST ---
+      } else if (strcmp(enteredCode, "999") == 0) {
+          centerPrintC("SERVO TEST", 1);
+          centerPrintC("ACTIVATED", 2);
+          Serial.println("[GAME] Manual Servo Test Triggered via 999#");
+          startShellEjectorSequence();
+          // Reset code so we can re-enter it without rebooting
+          enteredCode[0] = '\0';
+          return;
 
       // --- EXPLICIT MASTER CODE CHECK (FIX) ---
       } else if (strcmp(enteredCode, MASTER_CODE) == 0) {

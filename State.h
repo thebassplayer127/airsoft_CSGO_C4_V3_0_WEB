@@ -1,6 +1,6 @@
 // State.h
-// VERSION: 4.4.0
-// FIXED: Easter Egg Arming, Servo Triggering
+// VERSION: 4.6.0
+// FIXED: Easter Egg Lighting Reset on Track Finish
 
 #pragma once
 #include "Config.h"
@@ -18,6 +18,7 @@ extern bool starWarsModeActive;
 extern bool terminatorModeActive;
 extern bool bondModeActive;
 extern bool suddenDeathActive;
+extern bool easterEggActive;
 
 // Game states
 enum PropState { 
@@ -89,6 +90,7 @@ inline void resetSpecialModes() {
   terminatorModeActive = false;
   bondModeActive = false;
   suddenDeathActive = false;
+  easterEggActive = false; 
   
   Settings temp; 
   EEPROM.get(0, temp);
@@ -165,7 +167,7 @@ inline void setState(PropState newState) {
          myDFPlayer.play(SOUND_DETONATION_NEW);
       }
       
-      // CRITICAL: Call Servo Trigger here. The delay logic is internal to ShellEjector
+      // CRITICAL: Call Servo Trigger here.
       startShellEjectorSequence(); 
       break;
       
@@ -174,6 +176,7 @@ inline void setState(PropState newState) {
 
     case EASTER_EGG:
       // Master Code Logic: Play sound AND transition to ARMED
+      easterEggActive = true; 
       myDFPlayer.play(random(SOUND_EASTER_EGG_START, SOUND_EASTER_EGG_END + 1));
       
       // Transition to Armed immediately after sound starts (non-blocking)
@@ -246,7 +249,12 @@ inline void printDetail(uint8_t type, int value) {
        return;
     }
     
-    // 7. Standard chaining
+    // 7. Easter Egg 1 Logic (Reset Lights)
+    if (value >= SOUND_EASTER_EGG_START && value <= SOUND_EASTER_EGG_END) {
+        easterEggActive = false;
+    }
+
+    // 8. Standard chaining
     int track = nextTrackToPlay; nextTrackToPlay = 0;
     if (track != 0) {
       myDFPlayer.play(track);
