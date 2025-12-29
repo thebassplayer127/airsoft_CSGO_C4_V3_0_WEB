@@ -1,6 +1,6 @@
 // Display.h
-// VERSION: 3.5.1
-// FIXED: Restored 'flash' variable for readability
+// VERSION: 4.3.0
+// ADDED: Star Wars Pre-Game Visuals, Fixed Flashing
 
 #pragma once
 #include "State.h"
@@ -251,6 +251,13 @@ inline void updateDisplay() {
         centerPrintC("System Activated", 0);
         centerPrintC("Enter Arming Code:", 2);
         break;
+        
+      case STARWARS_PRE_GAME:
+        centerPrintC("STAR WARS MODE", 0);
+        centerPrintC("Saber FX Ready", 1);
+        centerPrintC("# = ARM BOMB", 2);
+        centerPrintC("* = CANCEL", 3);
+        break;
 
       case ARMING: {
         centerPrintC("Arming Code:", 1);
@@ -330,6 +337,11 @@ inline void updateLeds() {
       int cycle = (millis() / EASTER_EGG_CYCLE_MS) % 3;
       leds[0] = (cycle==0)?CRGB::Red: (cycle==1)?CRGB::Green: CRGB::Blue;
     } break;
+    case STARWARS_PRE_GAME: {
+      // Slow pulse Green/Red
+      int cycle = (millis() / 500) % 2;
+      leds[0] = (cycle==0) ? CRGB::Red : CRGB::Green;
+    } break;
     case EASTER_EGG_2:
       leds[0] = CRGB::HotPink; 
       break;
@@ -339,25 +351,37 @@ inline void updateLeds() {
 
   // --- 2. EXTERIOR STRIP (Indices 1 to NUM_LEDS-1) ---
   if (NUM_LEDS > 1) {
-    // A. EXPLOSION STROBE (Chaotic White Flash)
-    if (currentState == PRE_EXPLOSION) {
+    
+    // A. STAR WARS PRE-GAME FX
+    if (currentState == STARWARS_PRE_GAME) {
+       // Random flashes to simulate saber clashes or "ready" state
+       if (random(10) == 0) {
+          int pos = random(1, NUM_LEDS);
+          leds[pos] = (random(2)==0) ? CRGB::Green : CRGB::Red;
+       } else {
+          fadeToBlackBy(leds + 1, NUM_LEDS - 1, 40); // Fade trail
+       }
+    }
+    
+    // B. EXPLOSION STROBE (Chaotic White Flash)
+    else if (currentState == PRE_EXPLOSION) {
        uint32_t elapsed = millis() - stateEntryTimestamp;
        // Delayed Start: 4500ms (to sync with servo pop)
-       if (elapsed > 4500 && elapsed < 6000) {
-          // Slowed down strobe: 100ms
-          bool flash = (millis() / 70) % 2; 
+       if (elapsed > 4500 && elapsed < 6500) {
+          bool flash = (millis() / 100) % 2; 
           fill_solid(leds + 1, NUM_LEDS - 1, flash ? CRGB::White : CRGB::Black);
        } else {
           fill_solid(leds + 1, NUM_LEDS - 1, CRGB::Black);
        }
     }
-    // B. DOOM MODE (Chaotic Hellfire)
+    
+    // C. DOOM MODE (Chaotic Hellfire)
     else if (currentState == ARMED && doomModeActive) {
        // 1. Fade everything slightly
-       fadeToBlackBy(leds + 1, NUM_LEDS - 1, 150);
+       fadeToBlackBy(leds + 1, NUM_LEDS - 1, 100);
        
-       // 2. Ignite random spots (Chaotic - 8 spots)
-       for(int i=0; i<50; i++) { 
+       // 2. Ignite random spots
+       for(int i=0; i<20; i++) { 
           int pos = random(1, NUM_LEDS);
           int colorPick = random(10);
           if (colorPick < 6) leds[pos] = CRGB::Red;
@@ -365,7 +389,7 @@ inline void updateLeds() {
           else leds[pos] = CRGB::White; // Spark
        }
     }
-    // C. DEFAULT (Off)
+    // D. DEFAULT (Off)
     else {
        fill_solid(leds + 1, NUM_LEDS - 1, CRGB::Black);
     }

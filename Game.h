@@ -1,6 +1,6 @@
 // Game.h
-// VERSION: 4.1.0
-// ADDED: Star Wars Mode (501) with Keypad Swing FX
+// VERSION: 4.4.0
+// FIXED: Master Code (7355608) triggers Easter Egg State + Arming
 
 #pragma once
 #include <Arduino.h>
@@ -12,11 +12,12 @@
 #include "C4Net.h"
 #include "PlantSensor.h"
 
-// Global Flags for Special Modes
+// Global Flags
 bool doomModeActive = false;
 bool starWarsModeActive = false;
 bool terminatorModeActive = false;
 bool bondModeActive = false;
+bool suddenDeathActive = false;
 
 inline bool parseIpFromBuffer(const char* buf, uint32_t& out) {
   int a,b,c,d;
@@ -29,13 +30,9 @@ inline bool parseIpFromBuffer(const char* buf, uint32_t& out) {
 }
 
 inline void handleArmSwitch() {
-  // --- STAR WARS MODE TOGGLE FX ---
-  if (starWarsModeActive && armSwitch.rose()) {
-     // If we are in Star Wars mode (armed) and flip switch off/on, 
-     // play power sound. (Optional flavor)
+  // --- STAR WARS MODE TOGGLE FX (Pre-Game) ---
+  if (currentState == STARWARS_PRE_GAME && armSwitch.rose()) {
      myDFPlayer.play(SOUND_POWER_LIGHTSABER);
-     // Note: Standard logic below might override state, so be careful.
-     // For now, let standard logic handle the state change to STANDBY/IDLE.
   }
 
   // --- SUDDEN DEATH MODE LOGIC ---
@@ -46,13 +43,17 @@ inline void handleArmSwitch() {
              myDFPlayer.play(SOUND_MENU_CANCEL);
              return;
           }
+          suddenDeathActive = true;
           bombArmedTimestamp = millis();
           myDFPlayer.play(SOUND_BOMB_PLANTED);
           setState(ARMED);
        }
     } else if (armSwitch.fell()) { 
-       if (currentState == ARMED) {
+       if (currentState == ARMED && suddenDeathActive) {
           setState(DISARMED);
+       }
+       if ((currentState == EXPLODED || currentState == DISARMED) && suddenDeathActive) {
+          setState(STANDBY);
        }
     }
     return; 
@@ -60,8 +61,10 @@ inline void handleArmSwitch() {
 
   // --- NORMAL LOGIC ---
   if (armSwitch.rose()) {
-    if (currentState == DISARMED || currentState == EXPLODED || currentState == PROP_IDLE || currentState == AWAIT_ARM_TOGGLE)
+    if (currentState == DISARMED || currentState == EXPLODED || currentState == PROP_IDLE || currentState == AWAIT_ARM_TOGGLE) {
+      resetSpecialModes(); 
       setState(STANDBY);
+    }
   } else if (armSwitch.fell()) {
     if (currentState == STANDBY) setState(PROP_IDLE);
   }
@@ -70,13 +73,33 @@ inline void handleArmSwitch() {
 inline void handleKeypadInput(char key) {
   if (!key) return;
 
-  // --- LIGHTSABER SWING FX (When Armed in Star Wars Mode) ---
-  if (currentState == ARMED && starWarsModeActive) {
-     if (isdigit(key) || key == '*' || key == '#') {
-        // Play random swing sound
+  // --- STAR WARS PRE-GAME FX ---
+  if (currentState == STARWARS_PRE_GAME) {
+     if (isdigit(key)) {
         myDFPlayer.play(random(SOUND_SWING_START, SOUND_SWING_END + 1));
-        return; // Consume keypress so it doesn't trigger other logic
      }
+     if (key == '#') {
+        if (!isBombPlanted()) {
+           centerPrintC("ERROR: MUST PLANT", 1);
+           myDFPlayer.play(SOUND_MENU_CANCEL);
+           delay(2000); 
+           return; 
+        }
+        strcpy(activeArmCode, MASTER_CODE); 
+        settings.bomb_duration_ms = 350000; 
+        starWarsModeActive = true;
+        bombArmedTimestamp = millis();
+        myDFPlayer.play(SOUND_STAR_WARS_THEME); 
+        c4OnEnterArmed(); 
+        setState(ARMED);
+        return;
+     }
+     if (key == '*') {
+        resetSpecialModes();
+        setState(PROP_IDLE);
+        return;
+     }
+     return; 
   }
 
   if (currentState == PROP_IDLE) setState(ARMING);
@@ -125,32 +148,23 @@ inline void handleKeypadInput(char key) {
          return; 
       }
 
-      // --- 1. RESET FLAGS ---
-      doomModeActive = false;
-      starWarsModeActive = false;
-      terminatorModeActive = false;
-      bondModeActive = false;
+      resetSpecialModes();
 
-      // --- 2. CHECK CODES ---
+      // --- CHECK CODES ---
       
-      // A. "1138" -> THX Mode
-      if (strcmp(enteredCode, "1138") == 0) { 
+      // A. "501" -> Star Wars Pre-Game
+      if (strcmp(enteredCode, "501") == 0) {
+         setState(STARWARS_PRE_GAME);
+         enteredCode[0] = '\0'; 
+      
+      // B. "1138" -> THX Mode
+      } else if (strcmp(enteredCode, "1138") == 0) { 
          strcpy(activeArmCode, enteredCode);
          bombArmedTimestamp = millis();
          myDFPlayer.play(SOUND_THX); 
          c4OnEnterArmed(); setState(ARMED);
-      
-      // B. "501" -> Star Wars Mode
-      } else if (strcmp(enteredCode, "501") == 0) {
-         starWarsModeActive = true;
-         strcpy(activeArmCode, enteredCode);
-         // Timer: 5m 50s = 350000 ms
-         settings.bomb_duration_ms = 350000;
-         bombArmedTimestamp = millis();
-         myDFPlayer.play(SOUND_STAR_WARS_THEME); 
-         c4OnEnterArmed(); setState(ARMED);
 
-      // C. "8675309" -> Jenny Mode
+      // C. "8675309" -> Jenny
       } else if (strcmp(enteredCode, "8675309") == 0) {
          strcpy(activeArmCode, enteredCode);
          settings.bomb_duration_ms = 222000;
@@ -158,14 +172,14 @@ inline void handleKeypadInput(char key) {
          myDFPlayer.play(SOUND_JENNY); 
          c4OnEnterArmed(); setState(ARMED);
 
-      // D. "3141592" -> Nerd Mode
+      // D. "3141592" -> Nerd
       } else if (strcmp(enteredCode, "3141592") == 0) {
          strcpy(activeArmCode, enteredCode);
          bombArmedTimestamp = millis();
          myDFPlayer.play(SOUND_NERD); 
          c4OnEnterArmed(); setState(ARMED);
 
-      // E. "1984" -> Terminator Mode
+      // E. "1984" -> Terminator
       } else if (strcmp(enteredCode, "1984") == 0) {
          terminatorModeActive = true;
          strcpy(activeArmCode, enteredCode);
@@ -180,7 +194,7 @@ inline void handleKeypadInput(char key) {
          myDFPlayer.play(SOUND_JACKPOT); 
          c4OnEnterArmed(); setState(ARMED);
 
-      // G. "007" -> Bond Mode
+      // G. "007" -> Bond
       } else if (strcmp(enteredCode, "007") == 0) {
          bondModeActive = true;
          strcpy(activeArmCode, enteredCode);
@@ -189,7 +203,7 @@ inline void handleKeypadInput(char key) {
          myDFPlayer.play(SOUND_BOND_INTRO); 
          c4OnEnterArmed(); setState(ARMED);
          
-      // H. "12345" -> Spaceballs Mockery
+      // H. "12345" -> Spaceballs
       } else if (strcmp(enteredCode, "12345") == 0) {
          centerPrintC("IDIOT LUGGAGE?", 1);
          myDFPlayer.play(SOUND_SPACEBALLS);
@@ -197,7 +211,7 @@ inline void handleKeypadInput(char key) {
          enteredCode[0] = '\0';
          setState(PROP_IDLE);
 
-      // I. Standard Special Codes
+      // I. Standard Specials
       } else if (strcmp(enteredCode, "0451") == 0) {
          strcpy(activeArmCode, enteredCode);
          bombArmedTimestamp = millis();
@@ -217,7 +231,7 @@ inline void handleKeypadInput(char key) {
          enteredCode[0] = '\0';
          setState(PROP_IDLE);
 
-      } else if (strcmp(enteredCode, "666666") == 0) { // DOOM MODE
+      } else if (strcmp(enteredCode, "666666") == 0) { // DOOM
          doomModeActive = true;
          strcpy(activeArmCode, enteredCode);
          bombArmedTimestamp = millis();
@@ -228,9 +242,11 @@ inline void handleKeypadInput(char key) {
           strcpy(activeArmCode, enteredCode);
           setState(EASTER_EGG_2);
 
+      // --- EXPLICIT MASTER CODE CHECK (FIX) ---
       } else if (strcmp(enteredCode, MASTER_CODE) == 0) {
+          // Trigger the Easter Egg State (Random Sounds) AND Arm
           strcpy(activeArmCode, enteredCode);
-          setState(EASTER_EGG);
+          setState(EASTER_EGG); // State.h handles setting Armed from here
 
       // --- STANDARD ARMING ---
       } else if ((int)strlen(enteredCode) == CODE_LENGTH) {
@@ -261,6 +277,7 @@ inline void handleRfid() {
   uint8_t adminUID[] = {0xDE, 0xAD, 0xBE, 0xEF}; 
   if (UIDUtil::equals_len_bytes(4, adminUID, rfid.uid.uidByte, rfid.uid.size)) {
       myDFPlayer.play(SOUND_MENU_CONFIRM);
+      resetSpecialModes();
       setState(STANDBY); 
       rfid.PICC_HaltA();
       rfid.PCD_StopCrypto1();
@@ -526,6 +543,7 @@ inline void handleConfigMode(char key) {
 
 inline void serviceGameplay(char key) {
   switch (currentState) {
+    case STARWARS_PRE_GAME:
     case PROP_IDLE:
     case ARMING:
       handleKeypadInput(key);

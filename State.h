@@ -1,6 +1,6 @@
 // State.h
-// VERSION: 4.2.0
-// FIXED: Compilation error (SOUND_DOOM_MUSIC -> SOUND_RIP_TEAR) & Updated Logic
+// VERSION: 4.4.0
+// FIXED: Easter Egg Arming, Servo Triggering
 
 #pragma once
 #include "Config.h"
@@ -17,13 +17,15 @@ extern bool doomModeActive;
 extern bool starWarsModeActive;
 extern bool terminatorModeActive;
 extern bool bondModeActive;
+extern bool suddenDeathActive;
 
 // Game states
 enum PropState { 
   STANDBY, AWAIT_ARM_TOGGLE, PROP_IDLE, ARMING, ARMED, DISARMING_KEYPAD, 
   DISARMING_MANUAL, DISARMING_RFID, DISARMED, PRE_EXPLOSION, EXPLODED, 
   EASTER_EGG, EASTER_EGG_2,
-  CONFIG_MODE
+  CONFIG_MODE,
+  STARWARS_PRE_GAME 
 };
 
 // Config/menu states
@@ -69,6 +71,7 @@ inline const char* getStateName(PropState state) {
     case EASTER_EGG: return "EASTER_EGG";
     case EASTER_EGG_2: return "EASTER_EGG_2";
     case CONFIG_MODE: return "CONFIG_MODE";
+    case STARWARS_PRE_GAME: return "STARWARS_PRE";
     default: return "UNKNOWN";
   }
 }
@@ -78,6 +81,18 @@ inline void netNotifyState(const char* s) {
   wsSendJson(json); 
   if (strcmp(s, "DISARMED") == 0) { c4OnEnterDisarmed(); }
   else if (strcmp(s, "EXPLODED") == 0) { c4OnEnterExploded(); }
+}
+
+inline void resetSpecialModes() {
+  doomModeActive = false;
+  starWarsModeActive = false;
+  terminatorModeActive = false;
+  bondModeActive = false;
+  suddenDeathActive = false;
+  
+  Settings temp; 
+  EEPROM.get(0, temp);
+  settings.bomb_duration_ms = temp.bomb_duration_ms;
 }
 
 inline void setState(PropState newState) {
@@ -90,14 +105,10 @@ inline void setState(PropState newState) {
 
   enteredCode[0] = '\0';
   
-  if (newState == STANDBY || newState == PROP_IDLE) {
-    doomModeActive = false;
-    starWarsModeActive = false;
-    terminatorModeActive = false;
-    bondModeActive = false;
+  if (newState == STANDBY || newState == PROP_IDLE || newState == AWAIT_ARM_TOGGLE) {
+    resetSpecialModes();
   }
 
-  // Silence beeper in terminal states
   switch (newState) {
     case DISARMED:
     case PRE_EXPLOSION:
@@ -119,6 +130,10 @@ inline void setState(PropState newState) {
         myDFPlayer.play(SOUND_ARM_SWITCH_OFF);
       }
       break;
+      
+    case STARWARS_PRE_GAME:
+      myDFPlayer.play(SOUND_POWER_LIGHTSABER); 
+      break;
 
     case DISARMING_MANUAL:
     case DISARMING_RFID:
@@ -127,12 +142,10 @@ inline void setState(PropState newState) {
       break;
 
     case DISARMED:
-      // Terminator Mode Defuse Logic
       if (terminatorModeActive) {
-         myDFPlayer.play(SOUND_NOT_KILL_ANYONE); // Track 35
-         nextTrackToPlay = SOUND_DISARM_SUCCESS_2; // Optional chain to 'Counter-Terrorists Win'
+         myDFPlayer.play(SOUND_NOT_KILL_ANYONE); 
+         nextTrackToPlay = SOUND_DISARM_SUCCESS_2; 
       } 
-      // Standard Defuse
       else {
          myDFPlayer.play(SOUND_DISARM_SUCCESS_1);
          nextTrackToPlay = SOUND_DISARM_SUCCESS_2; 
@@ -140,30 +153,33 @@ inline void setState(PropState newState) {
       break;
 
     case PRE_EXPLOSION:
-      // Ensure clean audio transition
       myDFPlayer.stop(); 
       delay(50); 
       
-      doomModeActive = false; // Stop LED effects
+      doomModeActive = false; 
       
-      // Terminator Mode Detonation Logic
       if (terminatorModeActive) {
-         myDFPlayer.play(SOUND_ILL_BE_BACK); // Track 33
-         // We still want the physical effects
-         startShellEjectorSequence(); 
+         myDFPlayer.play(SOUND_ILL_BE_BACK); 
       }
-      // Standard Detonation
       else {
          myDFPlayer.play(SOUND_DETONATION_NEW);
-         startShellEjectorSequence(); 
       }
+      
+      // CRITICAL: Call Servo Trigger here. The delay logic is internal to ShellEjector
+      startShellEjectorSequence(); 
       break;
       
     case EXPLODED:
       break;
 
     case EASTER_EGG:
+      // Master Code Logic: Play sound AND transition to ARMED
       myDFPlayer.play(random(SOUND_EASTER_EGG_START, SOUND_EASTER_EGG_END + 1));
+      
+      // Transition to Armed immediately after sound starts (non-blocking)
+      bombArmedTimestamp = millis();
+      c4OnEnterArmed();
+      setState(ARMED); 
       break;
 
     case EASTER_EGG_2:
@@ -178,25 +194,23 @@ inline void printDetail(uint8_t type, int value) {
   if (type == DFPlayerPlayFinished) {
     Serial.printf("Track %d Finished!\n", value);
     
-    // Safety: If we are already exploded, ignore further audio events 
     if (currentState == EXPLODED) return;
 
-    // 1. Doom Logic: Intro -> Full Track
+    // 1. Doom Logic
     if (doomModeActive && value == SOUND_DOOM_SLAYER) {
-      // Changed to SOUND_RIP_TEAR (Track 23) based on new list
       myDFPlayer.play(SOUND_RIP_TEAR); 
     }
 
-    // 2. Bond Logic: Intro -> Theme
+    // 2. Bond Logic
     if (bondModeActive && value == SOUND_BOND_INTRO) {
       myDFPlayer.play(SOUND_BOND_THEME);
     }
 
-    // 3. Detonation -> Check for Dud (Logic for Standard Detonation only)
+    // 3. Detonation -> Check for Dud
     if (value == SOUND_DETONATION_NEW) {
       bool isDud = false;
       if (settings.dud_enabled) {
-        if (random(0, 100) < settings.dud_chance) isDud = true;
+        if (random(1, 101) <= settings.dud_chance) isDud = true;
       }
 
       if (isDud) {
