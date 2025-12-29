@@ -1,6 +1,6 @@
 // Game.h
-// VERSION: 3.9.0
-// FIXED: Codes 0451 and 14085 now ARM the bomb (with special SFX)
+// VERSION: 4.1.0
+// ADDED: Star Wars Mode (501) with Keypad Swing FX
 
 #pragma once
 #include <Arduino.h>
@@ -12,8 +12,11 @@
 #include "C4Net.h"
 #include "PlantSensor.h"
 
-// Global Flag for Doom Mode
+// Global Flags for Special Modes
 bool doomModeActive = false;
+bool starWarsModeActive = false;
+bool terminatorModeActive = false;
+bool bondModeActive = false;
 
 inline bool parseIpFromBuffer(const char* buf, uint32_t& out) {
   int a,b,c,d;
@@ -26,6 +29,15 @@ inline bool parseIpFromBuffer(const char* buf, uint32_t& out) {
 }
 
 inline void handleArmSwitch() {
+  // --- STAR WARS MODE TOGGLE FX ---
+  if (starWarsModeActive && armSwitch.rose()) {
+     // If we are in Star Wars mode (armed) and flip switch off/on, 
+     // play power sound. (Optional flavor)
+     myDFPlayer.play(SOUND_POWER_LIGHTSABER);
+     // Note: Standard logic below might override state, so be careful.
+     // For now, let standard logic handle the state change to STANDBY/IDLE.
+  }
+
   // --- SUDDEN DEATH MODE LOGIC ---
   if (settings.sudden_death_mode) {
     if (armSwitch.rose()) { 
@@ -34,7 +46,6 @@ inline void handleArmSwitch() {
              myDFPlayer.play(SOUND_MENU_CANCEL);
              return;
           }
-          // Arm Immediately
           bombArmedTimestamp = millis();
           myDFPlayer.play(SOUND_BOMB_PLANTED);
           setState(ARMED);
@@ -44,7 +55,7 @@ inline void handleArmSwitch() {
           setState(DISARMED);
        }
     }
-    return; // Skip normal logic
+    return; 
   }
 
   // --- NORMAL LOGIC ---
@@ -58,6 +69,16 @@ inline void handleArmSwitch() {
 
 inline void handleKeypadInput(char key) {
   if (!key) return;
+
+  // --- LIGHTSABER SWING FX (When Armed in Star Wars Mode) ---
+  if (currentState == ARMED && starWarsModeActive) {
+     if (isdigit(key) || key == '*' || key == '#') {
+        // Play random swing sound
+        myDFPlayer.play(random(SOUND_SWING_START, SOUND_SWING_END + 1));
+        return; // Consume keypress so it doesn't trigger other logic
+     }
+  }
+
   if (currentState == PROP_IDLE) setState(ARMING);
   if (currentState == ARMED) setState(DISARMING_KEYPAD);
   displayNeedsUpdate = true;
@@ -95,7 +116,6 @@ inline void handleKeypadInput(char key) {
   } else if (key == '#') {
     if (currentState == ARMING) {
       
-      // 1. MUST PLANT CHECK
       if (!isBombPlanted()) {
          centerPrintC("ERROR: MUST PLANT", 1);
          centerPrintC("ON SITE FIRST!", 2);
@@ -105,34 +125,98 @@ inline void handleKeypadInput(char key) {
          return; 
       }
 
-      // 2. CHECK CODES (Order Matters: Check specifics first, then general length)
+      // --- 1. RESET FLAGS ---
+      doomModeActive = false;
+      starWarsModeActive = false;
+      terminatorModeActive = false;
+      bondModeActive = false;
+
+      // --- 2. CHECK CODES ---
       
-      // A. Short/Special Codes (NOW ARMING)
-      if (strcmp(enteredCode, "0451") == 0) {
-         // Arms with Bioshock/Deus Ex Sound
+      // A. "1138" -> THX Mode
+      if (strcmp(enteredCode, "1138") == 0) { 
+         strcpy(activeArmCode, enteredCode);
+         bombArmedTimestamp = millis();
+         myDFPlayer.play(SOUND_THX); 
+         c4OnEnterArmed(); setState(ARMED);
+      
+      // B. "501" -> Star Wars Mode
+      } else if (strcmp(enteredCode, "501") == 0) {
+         starWarsModeActive = true;
+         strcpy(activeArmCode, enteredCode);
+         // Timer: 5m 50s = 350000 ms
+         settings.bomb_duration_ms = 350000;
+         bombArmedTimestamp = millis();
+         myDFPlayer.play(SOUND_STAR_WARS_THEME); 
+         c4OnEnterArmed(); setState(ARMED);
+
+      // C. "8675309" -> Jenny Mode
+      } else if (strcmp(enteredCode, "8675309") == 0) {
+         strcpy(activeArmCode, enteredCode);
+         settings.bomb_duration_ms = 222000;
+         bombArmedTimestamp = millis();
+         myDFPlayer.play(SOUND_JENNY); 
+         c4OnEnterArmed(); setState(ARMED);
+
+      // D. "3141592" -> Nerd Mode
+      } else if (strcmp(enteredCode, "3141592") == 0) {
+         strcpy(activeArmCode, enteredCode);
+         bombArmedTimestamp = millis();
+         myDFPlayer.play(SOUND_NERD); 
+         c4OnEnterArmed(); setState(ARMED);
+
+      // E. "1984" -> Terminator Mode
+      } else if (strcmp(enteredCode, "1984") == 0) {
+         terminatorModeActive = true;
+         strcpy(activeArmCode, enteredCode);
+         bombArmedTimestamp = millis();
+         myDFPlayer.play(SOUND_HASTA_2); 
+         c4OnEnterArmed(); setState(ARMED);
+
+      // F. "7777777" -> Jackpot
+      } else if (strcmp(enteredCode, "7777777") == 0) {
+         strcpy(activeArmCode, enteredCode);
+         bombArmedTimestamp = millis();
+         myDFPlayer.play(SOUND_JACKPOT); 
+         c4OnEnterArmed(); setState(ARMED);
+
+      // G. "007" -> Bond Mode
+      } else if (strcmp(enteredCode, "007") == 0) {
+         bondModeActive = true;
+         strcpy(activeArmCode, enteredCode);
+         settings.bomb_duration_ms = 105000;
+         bombArmedTimestamp = millis();
+         myDFPlayer.play(SOUND_BOND_INTRO); 
+         c4OnEnterArmed(); setState(ARMED);
+         
+      // H. "12345" -> Spaceballs Mockery
+      } else if (strcmp(enteredCode, "12345") == 0) {
+         centerPrintC("IDIOT LUGGAGE?", 1);
+         myDFPlayer.play(SOUND_SPACEBALLS);
+         delay(2500);
+         enteredCode[0] = '\0';
+         setState(PROP_IDLE);
+
+      // I. Standard Special Codes
+      } else if (strcmp(enteredCode, "0451") == 0) {
          strcpy(activeArmCode, enteredCode);
          bombArmedTimestamp = millis();
          myDFPlayer.play(SOUND_SOM_BITCH); 
-         c4OnEnterArmed();
-         setState(ARMED);
+         c4OnEnterArmed(); setState(ARMED);
       
       } else if (strcmp(enteredCode, "14085") == 0) {
-         // Arms with MGS Alert Sound
          strcpy(activeArmCode, enteredCode);
          bombArmedTimestamp = millis();
          myDFPlayer.play(SOUND_MGS_ALERT);
-         c4OnEnterArmed();
-         setState(ARMED);
+         c4OnEnterArmed(); setState(ARMED);
 
       } else if (strcmp(enteredCode, "0000000") == 0) {
-         // "Too Easy" -> Still rejects arming (mockery code)
          centerPrintC("TOO EASY", 1);
          myDFPlayer.play(SOUND_LAME);
          delay(1500);
          enteredCode[0] = '\0';
          setState(PROP_IDLE);
 
-      // B. Easter Egg Modes (These transition state)
       } else if (strcmp(enteredCode, "666666") == 0) { // DOOM MODE
          doomModeActive = true;
          strcpy(activeArmCode, enteredCode);
@@ -142,13 +226,13 @@ inline void handleKeypadInput(char key) {
       
       } else if (strcmp(enteredCode, "5318008") == 0) {
           strcpy(activeArmCode, enteredCode);
-          setState(EASTER_EGG_2); // Handles its own arming transition
+          setState(EASTER_EGG_2);
 
       } else if (strcmp(enteredCode, MASTER_CODE) == 0) {
           strcpy(activeArmCode, enteredCode);
-          setState(EASTER_EGG); // Handles its own flow
+          setState(EASTER_EGG);
 
-      // C. Normal Arming (Strict 7-digit check)
+      // --- STANDARD ARMING ---
       } else if ((int)strlen(enteredCode) == CODE_LENGTH) {
         strcpy(activeArmCode, enteredCode);
         bombArmedTimestamp = millis();
@@ -157,7 +241,6 @@ inline void handleKeypadInput(char key) {
         setState(ARMED);
         
       } else {
-        // If code is not special AND not 7 digits, reject it
         setState(PROP_IDLE);
       }
     }
@@ -175,7 +258,6 @@ inline void handleRfid() {
   if (!rfid.PICC_IsNewCardPresent()) return;
   if (!rfid.PICC_ReadCardSerial())   return;
 
-  // -- GOD MODE CARD CHECK --
   uint8_t adminUID[] = {0xDE, 0xAD, 0xBE, 0xEF}; 
   if (UIDUtil::equals_len_bytes(4, adminUID, rfid.uid.uidByte, rfid.uid.size)) {
       myDFPlayer.play(SOUND_MENU_CONFIRM);
@@ -201,7 +283,6 @@ inline void handleRfid() {
 }
 
 inline void handleBeepLogic() {
-  // Beep Logic Scaled by Bomb Duration
   uint32_t elapsed = millis() - bombArmedTimestamp;
   if (elapsed > settings.bomb_duration_ms) elapsed = settings.bomb_duration_ms;
 

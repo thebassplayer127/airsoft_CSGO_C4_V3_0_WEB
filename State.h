@@ -1,6 +1,6 @@
 // State.h
-// VERSION: 3.7.0
-// FIXED: Removed Loop from Doom Mode (Audio is long enough)
+// VERSION: 4.2.0
+// FIXED: Compilation error (SOUND_DOOM_MUSIC -> SOUND_RIP_TEAR) & Updated Logic
 
 #pragma once
 #include "Config.h"
@@ -14,6 +14,9 @@ void wsSendJson(const String& json);
 
 // --- GLOBAL FLAGS ---
 extern bool doomModeActive;
+extern bool starWarsModeActive;
+extern bool terminatorModeActive;
+extern bool bondModeActive;
 
 // Game states
 enum PropState { 
@@ -89,6 +92,9 @@ inline void setState(PropState newState) {
   
   if (newState == STANDBY || newState == PROP_IDLE) {
     doomModeActive = false;
+    starWarsModeActive = false;
+    terminatorModeActive = false;
+    bondModeActive = false;
   }
 
   // Silence beeper in terminal states
@@ -121,20 +127,36 @@ inline void setState(PropState newState) {
       break;
 
     case DISARMED:
-      myDFPlayer.play(SOUND_DISARM_SUCCESS_1);
-      nextTrackToPlay = SOUND_DISARM_SUCCESS_2; 
+      // Terminator Mode Defuse Logic
+      if (terminatorModeActive) {
+         myDFPlayer.play(SOUND_NOT_KILL_ANYONE); // Track 35
+         nextTrackToPlay = SOUND_DISARM_SUCCESS_2; // Optional chain to 'Counter-Terrorists Win'
+      } 
+      // Standard Defuse
+      else {
+         myDFPlayer.play(SOUND_DISARM_SUCCESS_1);
+         nextTrackToPlay = SOUND_DISARM_SUCCESS_2; 
+      }
       break;
 
     case PRE_EXPLOSION:
-      // FIX: Ensure clean audio transition
-      // We aren't using loop() anymore, but stopping ensures the long track cuts immediately.
+      // Ensure clean audio transition
       myDFPlayer.stop(); 
       delay(50); 
       
-      doomModeActive = false; 
+      doomModeActive = false; // Stop LED effects
       
-      myDFPlayer.play(SOUND_DETONATION_NEW);
-      startShellEjectorSequence(); 
+      // Terminator Mode Detonation Logic
+      if (terminatorModeActive) {
+         myDFPlayer.play(SOUND_ILL_BE_BACK); // Track 33
+         // We still want the physical effects
+         startShellEjectorSequence(); 
+      }
+      // Standard Detonation
+      else {
+         myDFPlayer.play(SOUND_DETONATION_NEW);
+         startShellEjectorSequence(); 
+      }
       break;
       
     case EXPLODED:
@@ -159,13 +181,18 @@ inline void printDetail(uint8_t type, int value) {
     // Safety: If we are already exploded, ignore further audio events 
     if (currentState == EXPLODED) return;
 
-    // 1. Doom Logic
+    // 1. Doom Logic: Intro -> Full Track
     if (doomModeActive && value == SOUND_DOOM_SLAYER) {
-      // CHANGED: Use play() instead of loop() since track is long enough
-      myDFPlayer.play(SOUND_DOOM_MUSIC); 
+      // Changed to SOUND_RIP_TEAR (Track 23) based on new list
+      myDFPlayer.play(SOUND_RIP_TEAR); 
     }
 
-    // 2. Detonation -> Check for Dud
+    // 2. Bond Logic: Intro -> Theme
+    if (bondModeActive && value == SOUND_BOND_INTRO) {
+      myDFPlayer.play(SOUND_BOND_THEME);
+    }
+
+    // 3. Detonation -> Check for Dud (Logic for Standard Detonation only)
     if (value == SOUND_DETONATION_NEW) {
       bool isDud = false;
       if (settings.dud_enabled) {
@@ -181,14 +208,21 @@ inline void printDetail(uint8_t type, int value) {
       return; 
     }
 
-    // 3. Dud Sound Finished
+    // 4. Terminator Detonation Finished
+    if (value == SOUND_ILL_BE_BACK) {
+        setState(EXPLODED);
+        nextTrackToPlay = 0;
+        return;
+    }
+
+    // 5. Dud Sound Finished
     if (value == SOUND_DUD_FAIL) {
        setState(EXPLODED); 
        nextTrackToPlay = 0;
        return;
     }
 
-    // 4. Easter Egg 2 (Jugs)
+    // 6. Easter Egg 2 (Jugs)
     if (currentState == EASTER_EGG_2 && value == SOUND_JUGS) {
        bombArmedTimestamp = millis();
        myDFPlayer.play(SOUND_BOMB_PLANTED);
@@ -198,7 +232,7 @@ inline void printDetail(uint8_t type, int value) {
        return;
     }
     
-    // 5. Standard chaining
+    // 7. Standard chaining
     int track = nextTrackToPlay; nextTrackToPlay = 0;
     if (track != 0) {
       myDFPlayer.play(track);
