@@ -1,7 +1,6 @@
 // Display.h
-// VERSION: 5.3.0
-// FIXED: Clean header definitions
-// FIXED: Strobe Delay (4500ms)
+// VERSION: 5.4.0
+// FIXED: Updated Exit Menu Text
 
 #pragma once
 #include "State.h"
@@ -54,7 +53,7 @@ inline void updateDisplay() {
           "Bomb Time", "Manual Disarm", "RFID Disarm",
           "Sudden Death", "Dud Settings", 
           "RFID Tags", "Settings & Servo", "Network",
-          "Save & Exit", "Exit (No Save)"
+          "Save & Exit", "Exit" // Changed from "Exit (No Save)"
         };
         const int TOTAL = 10; 
 
@@ -228,9 +227,9 @@ inline void updateDisplay() {
       } break;
 
       case MENU_EXIT_NO_SAVE: {
-        centerPrintC("Configuration", 0);
-        centerPrintC("DISCARDING...", 1);
-        centerPrintC("Device will reboot.", 2);
+        centerPrintC("Exiting Menu...", 0);
+        centerPrintC("(Changes Kept for", 1);
+        centerPrintC(" this session)", 2);
       } break;
 
       case MENU_NET_FORGET_CONFIRM: {

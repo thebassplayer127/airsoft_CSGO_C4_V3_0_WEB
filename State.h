@@ -1,7 +1,7 @@
 // State.h
-// VERSION: 4.9.0
-// FIXED: Servo Trigger Delay (Sync with Strobe)
-// FIXED: Easter Egg Enable Check
+// VERSION: 5.0.0
+// FIXED: Servo Trigger Flag Reset
+// FIXED: Externs for Servo Logic
 
 #pragma once
 #include "Config.h"
@@ -20,6 +20,9 @@ extern bool terminatorModeActive;
 extern bool bondModeActive;
 extern bool suddenDeathActive;
 extern bool easterEggActive;
+
+// Fix 1: Make this extern so we can reset it in setState
+extern bool servoTriggeredThisExplosion; 
 
 // Game states
 enum PropState { 
@@ -117,6 +120,12 @@ inline void setState(PropState newState) {
     resetSpecialModes();
   }
 
+  // --- FIX 1: Reset Servo Flag ---
+  // Ensure servo can fire again on the next game
+  if (newState == STANDBY || newState == ARMED) {
+    servoTriggeredThisExplosion = false;
+  }
+
   switch (newState) {
     case DISARMED:
     case PRE_EXPLOSION:
@@ -186,7 +195,7 @@ inline void setState(PropState newState) {
       
       // NOTE: Servo is NO LONGER triggered here instantly.
       // It is handled in the main loop() or Display::updateLeds() timing
-      // to sync with the strobe (approx 1s in).
+      // to sync with the strobe (approx 4.5s in).
     } break;
       
     case EXPLODED:

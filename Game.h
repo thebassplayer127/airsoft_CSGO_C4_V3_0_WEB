@@ -1,8 +1,8 @@
 // Game.h
-// VERSION: 5.1.0
-// FIXED: Beep Logic (Fixed Duration)
-// FIXED: Menu Structure (Exit options in Main)
-// FIXED: Servo/Strobe Sync (4500ms delay)
+// VERSION: 5.2.0
+// FIXED: Robust Beep Logic (Cycle-based)
+// FIXED: Menu Exit No Save (Now keeps RAM changes, no reboot)
+// FIXED: Removed duplicate servo flag (now in State.h)
 
 #pragma once
 #include <Arduino.h>
@@ -21,7 +21,6 @@ bool terminatorModeActive = false;
 bool bondModeActive = false;
 bool suddenDeathActive = false;
 bool easterEggActive = false; 
-bool servoTriggeredThisExplosion = false; 
 
 inline bool parseIpFromBuffer(const char* buf, uint32_t& out) {
   int a,b,c,d;
@@ -300,6 +299,9 @@ inline void handleRfid() {
 }
 
 inline void handleBeepLogic() {
+  // --- FIX 2: Robust Beep State Machine ---
+  // Prevents "short/long" glitches caused by loop timing
+  
   uint32_t elapsed = millis() - bombArmedTimestamp;
   if (elapsed > settings.bomb_duration_ms) elapsed = settings.bomb_duration_ms;
 
@@ -310,25 +312,36 @@ inline void handleBeepLogic() {
   float bps = 1.05f * powf(1.039f, virtual_t);
   uint32_t interval = (uint32_t)(1000.0f / bps);
 
-  // FIXED LOGIC: Strict duration enforcement
-  // Normal Beep: 125ms
-  // Panic Beep: 50% of interval (if interval < 250ms)
+  // Determine Duration
   uint32_t currentBeepDuration = BEEP_TONE_DURATION_MS;
-
   if (interval < (BEEP_TONE_DURATION_MS * 2)) {
      currentBeepDuration = interval / 2;
   }
 
-  if (millis() - lastBeepTimestamp >= interval) {
-    lastBeepTimestamp = millis();
-    beepStart(BEEP_TONE_FREQ);
-    ledIsOn = true;
+  // --- Cycle Calculation ---
+  // If the time since last beep start exceeds interval, we start a new cycle
+  uint32_t delta = millis() - lastBeepTimestamp;
+  if (delta >= interval) {
+     lastBeepTimestamp = millis();
+     delta = 0;
+  }
+
+  // Robust ON/OFF Logic
+  // Only trigger start/stop ONCE when state changes
+  static bool isBeeping = false;
+  
+  if (delta < currentBeepDuration) {
+     if (!isBeeping) {
+        beepStart(BEEP_TONE_FREQ);
+        ledIsOn = true;
+        isBeeping = true;
+     }
   } else {
-    // Cut off the beep strictly at the duration
-    if (millis() - lastBeepTimestamp > currentBeepDuration) {
-      beepStop();
-      ledIsOn = false;
-    }
+     if (isBeeping) {
+        beepStop();
+        ledIsOn = false;
+        isBeeping = false;
+     }
   }
 }
 
@@ -364,11 +377,15 @@ inline void handleConfigMode(char key) {
               requestRestart(600);
             } break;
             case 9: {
+              // --- FIX 3: Exit without saving changes to EEPROM, BUT KEEP RAM ---
+              // Previously this rebooted the device, resetting changes to defaults.
+              // Now it simply exits the menu, keeping your session edits active.
               currentConfigState = MENU_EXIT_NO_SAVE;
               displayNeedsUpdate = true;
               safePlay(SOUND_MENU_CANCEL);
-              delay(100);
-              requestRestart(200);
+              delay(500); 
+              configInputBuffer[0]='\0';
+              setState(STANDBY);
             } break;
           }
         }

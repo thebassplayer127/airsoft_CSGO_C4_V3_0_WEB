@@ -1,7 +1,7 @@
 // ShellEjector.h
-// VERSION: 3.1.0
-// FIXED: Removed 'static' from myServo to prevent duplicate instances
-// FIXED: Servo attaches/detaches cleanly
+// VERSION: 3.5.0 (Reverted)
+// STATUS: Restored 'detach' logic. Servo goes limp when idle.
+// NOTE: This fixes "no movement", but "wiggle on start" is expected behavior for open-loop servos.
 
 #pragma once
 #include <Arduino.h>
@@ -18,22 +18,34 @@
 static const uint32_t SERVO_HOLD_TIME       = 1000; 
 
 // Internal State
-// IMPORTANT: 'extern' tells the compiler this object exists in the .ino file.
-// This prevents creating multiple invisible copies of the servo object.
+// 'extern' ensures all files share the EXACT SAME variable instance.
 extern Servo myServo; 
-
 enum EjectorState { EJECTOR_IDLE, EJECTOR_EXTENDED, EJECTOR_RETRACTING };
-static EjectorState ejectorState = EJECTOR_IDLE;
-static uint32_t ejectorTimer = 0;
+
+extern EjectorState ejectorState;
+extern uint32_t ejectorTimer;
 
 inline void initShellEjector() {
 #ifdef SERVO_PIN
-  // Ensure pin is ready, but don't attach yet (silence)
   ejectorState = EJECTOR_IDLE;
   pinMode(SERVO_PIN, OUTPUT);
   digitalWrite(SERVO_PIN, LOW);
+
+  // --- Force Reset to Start Position on Boot ---
+  if (settings.servo_enabled) {
+      Serial.println("[SERVO] Resetting to Start Angle...");
+      myServo.setPeriodHertz(50);
+      
+      // Write target BEFORE attach to minimize jump
+      myServo.write(settings.servo_start_angle); 
+      myServo.attach(SERVO_PIN);
+      
+      delay(500); // Give it time to move home
+      
+      myServo.detach(); // Relax (Go Limp)
+  }
   
-  Serial.printf("[SERVO] Initialized (Lazy Attach) on Pin %d\n", SERVO_PIN);
+  Serial.printf("[SERVO] Initialized on Pin %d\n", SERVO_PIN);
 #else
   Serial.println("[SERVO] ERROR: SERVO_PIN NOT DEFINED!");
 #endif
@@ -45,12 +57,14 @@ inline void startShellEjectorSequence() {
 
     Serial.println("[SERVO] POP! (Attaching & Moving)");
     
-    // 1. Attach
-    myServo.setPeriodHertz(50);
-    myServo.attach(SERVO_PIN);
-    
-    // 2. Move to "End" (Pop) Angle
+    // 1. Define Pulse Width FIRST
     myServo.write(settings.servo_end_angle);
+    
+    // 2. Attach (Sends the pulse)
+    if (!myServo.attached()) {
+      myServo.setPeriodHertz(50);
+      myServo.attach(SERVO_PIN);
+    }
     
     ejectorState = EJECTOR_EXTENDED;
     ejectorTimer = millis();
@@ -62,12 +76,14 @@ inline void updateShellEjector() {
 
   uint32_t elapsed = millis() - ejectorTimer;
 
-  // Phase 1: Holding the "Pop" position
+  // Phase 1: Holding the "Pop" position (End Angle)
   if (ejectorState == EJECTOR_EXTENDED) {
     if (elapsed >= SERVO_HOLD_TIME) {
       Serial.println("[SERVO] Retracting...");
+      
       // 3. Move back to "Start" (Neutral) Angle
       myServo.write(settings.servo_start_angle);
+      
       ejectorState = EJECTOR_RETRACTING;
       ejectorTimer = millis(); 
     }

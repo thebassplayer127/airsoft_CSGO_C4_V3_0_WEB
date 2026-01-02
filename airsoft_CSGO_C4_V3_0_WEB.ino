@@ -1,6 +1,6 @@
 /*
   PROJECT: Counter-Strike C4 Prop (Project 2)
-  VERSION: 3.5.0
+  VERSION: 3.6.0 (Re-print for consistency)
   DATE: 2025-10-26
   AUTHOR: Andrew Florio
 
@@ -43,6 +43,10 @@ CRGB leds[NUM_LEDS];
 // SERVO DEFINITION (Must be here to handle the extern in ShellEjector.h)
 Servo myServo;
 
+// FIX: Define the Ejector variables here so they are shared correctly
+EjectorState ejectorState = EJECTOR_IDLE;
+uint32_t ejectorTimer = 0;
+
 Keypad keypad = Keypad(makeKeymap(KEYS), ROW_PINS, COL_PINS, KEYPAD_ROWS, KEYPAD_COLS);
 
 // State and config globals
@@ -61,6 +65,9 @@ int configMenuIndex = 0;
 char configInputBuffer[CONFIG_INPUT_MAX] = "";
 int rfidViewIndex = 0;
 volatile uint32_t g_restartAtMs = 0;   // for Utils.h deferred restart
+
+// FIX: Servo Trigger Flag
+bool servoTriggeredThisExplosion = false; 
 
 // Codes
 char enteredCode[CODE_LENGTH + 1] = "";
