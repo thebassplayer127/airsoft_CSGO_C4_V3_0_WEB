@@ -1,11 +1,11 @@
 // Sounds.h
-// VERSION: 4.2.0
-// ADDED: Full 46 Track List & Corrected Definitions
+// VERSION: 4.3.0
+// ADDED: Track 47 (SOUND_DISARM_LOOP) to expanded list
 
 #pragma once
 
 // --- MP3 TRACK MAPPING ---
-// 1..46 matches your updated list
+// 1..47 matches your updated list
 #define SOUND_BOMB_PLANTED        1  // played after setting code and timer starts
 #define SOUND_T_WIN               2  // Not used
 #define SOUND_KEY_PRESS           3  // Admin menu click
@@ -31,7 +31,7 @@
 #define SOUND_RIP_TEAR            23 // 666666 (Track 2 of 2) - WAS MISSING/NAMED WRONG
 #define SOUND_BIOSHOCK            24 // Invalid RFID
 
-// --- NEW EXPANDED LIST (25-46) ---
+// --- NEW EXPANDED LIST (25-47) ---
 #define SOUND_THX                 25 // 1138
 #define SOUND_JENNY               26 // 8675309 (3m42s)
 #define SOUND_NERD                27 // 3141592 (Pi)
@@ -54,6 +54,7 @@
 #define SOUND_MAJOR_ASSHOLE       44 // Spaceballs unused
 #define SOUND_AINT_FOUND_SHIT     45 // Spaceballs unused
 #define SOUND_REKT_NERD           46 // Unused
+#define SOUND_DISARM_LOOP         47 // Continuous noise while disarming
 
 // --- LOGICAL ALIASES ---
 #define SOUND_MENU_NAV            SOUND_KEY_PRESS
@@ -72,3 +73,9 @@
 #define SOUND_EASTER_EGG_END      14
 #define SOUND_SWING_START         39
 #define SOUND_SWING_END           43
+
+// --- BEEP TONES ---
+// Note: We use tone() for the countdown beeps, not mp3s, 
+// to ensure perfect timing with the LED strobe.
+#define BEEP_TONE_FREQ     3000
+#define BEEP_TONE_DURATION_MS 100

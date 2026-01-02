@@ -1,7 +1,8 @@
 // State.h
-// VERSION: 5.0.0
-// FIXED: Servo Trigger Flag Reset
-// FIXED: Externs for Servo Logic
+// VERSION: 5.2.0
+// FIXED: Terminator Explosion Chain (Track 33 -> 7 -> Exploded)
+// FIXED: Disarm Sound Loop Logic (Track 8 -> 47)
+// FIXED: Resume Background Music on Abort
 
 #pragma once
 #include "Config.h"
@@ -21,7 +22,6 @@ extern bool bondModeActive;
 extern bool suddenDeathActive;
 extern bool easterEggActive;
 
-// Fix 1: Make this extern so we can reset it in setState
 extern bool servoTriggeredThisExplosion; 
 
 // Game states
@@ -31,7 +31,7 @@ enum PropState {
   EASTER_EGG, EASTER_EGG_2,
   CONFIG_MODE,
   STARWARS_PRE_GAME,
-  PROP_DUD  // New State for Dud Logic
+  PROP_DUD  
 };
 
 // Config/menu states
@@ -120,8 +120,7 @@ inline void setState(PropState newState) {
     resetSpecialModes();
   }
 
-  // --- FIX 1: Reset Servo Flag ---
-  // Ensure servo can fire again on the next game
+  // Reset Servo Flag
   if (newState == STANDBY || newState == ARMED) {
     servoTriggeredThisExplosion = false;
   }
@@ -139,6 +138,15 @@ inline void setState(PropState newState) {
   }
 
   switch (newState) {
+    case ARMED:
+      // FIX: Resume Background Music if we aborted a disarm
+      if (oldState == DISARMING_MANUAL || oldState == DISARMING_RFID || oldState == DISARMING_KEYPAD) {
+         if (doomModeActive) safePlay(SOUND_DOOM_SLAYER);
+         else if (starWarsModeActive) safePlay(SOUND_STAR_WARS_THEME);
+         else if (bondModeActive) safePlay(SOUND_BOND_THEME);
+      }
+      break;
+
     case PROP_IDLE:
       safePlay(SOUND_ARM_SWITCH_ON);
       break;
@@ -156,7 +164,8 @@ inline void setState(PropState newState) {
     case DISARMING_MANUAL:
     case DISARMING_RFID:
       disarmStartTimestamp = millis();
-      safePlay(SOUND_DISARM_BEGIN);
+      // Start the "Begin" sound. The loop (47) is handled in printDetail when this finishes.
+      safePlay(SOUND_DISARM_BEGIN); 
       break;
 
     case DISARMED:
@@ -187,15 +196,12 @@ inline void setState(PropState newState) {
       doomModeActive = false; 
       
       if (terminatorModeActive) {
+         // Terminator: Play quote first. Explosion chained in printDetail
          safePlay(SOUND_ILL_BE_BACK); 
       }
       else {
          safePlay(SOUND_DETONATION_NEW);
       }
-      
-      // NOTE: Servo is NO LONGER triggered here instantly.
-      // It is handled in the main loop() or Display::updateLeds() timing
-      // to sync with the strobe (approx 4.5s in).
     } break;
       
     case EXPLODED:
@@ -237,14 +243,26 @@ inline void printDetail(uint8_t type, int value) {
       safePlay(SOUND_BOND_THEME);
     }
 
+    // --- FIX: Disarm Sound Loop ---
+    if (value == SOUND_DISARM_BEGIN) {
+       // If we are still in a disarming state, start the loop track
+       if (currentState == DISARMING_MANUAL || currentState == DISARMING_RFID) {
+           safePlay(SOUND_DISARM_LOOP);
+       }
+       return;
+    }
+
     if (value == SOUND_DETONATION_NEW) {
       setState(EXPLODED); 
       nextTrackToPlay = 0;
       return; 
     }
 
+    // --- FIX: Terminator Explosion Chain ---
     if (value == SOUND_ILL_BE_BACK) {
-        setState(EXPLODED);
+        // Terminator quote finished, NOW play the explosion
+        // When explosion finishes (logic above), it will set EXPLODED state
+        safePlay(SOUND_DETONATION_NEW);
         nextTrackToPlay = 0;
         return;
     }

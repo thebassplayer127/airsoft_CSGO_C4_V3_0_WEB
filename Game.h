@@ -1,6 +1,7 @@
 // Game.h
-// VERSION: 5.6.0
-// FIXED: RFID Reader Re-Init on Add Menu Entry (Fixes "Not Reading" bug)
+// VERSION: 5.8.0
+// FIXED: Explicitly stop audio on disarm abort (cuts off loop)
+// FIXED: RFID Reader Re-Init on Add Menu Entry
 
 #pragma once
 #include <Arduino.h>
@@ -259,7 +260,11 @@ inline void handleDisarmButton() {
   if (currentState == ARMED || currentState == DISARMING_KEYPAD) {
     if (disarmButton.fell()) setState(DISARMING_MANUAL);
   }
-  if (currentState == DISARMING_MANUAL && disarmButton.rose()) setState(ARMED);
+  // FIX: Explicitly stop audio when releasing button to cut off Loop track
+  if (currentState == DISARMING_MANUAL && disarmButton.rose()) {
+      myDFPlayer.stop(); 
+      setState(ARMED);
+  }
 }
 
 inline void handleRfid() {
@@ -498,7 +503,7 @@ inline void handleConfigMode(char key) {
           } else if (rfidViewIndex == settings.num_rfid_uids) {
             if (settings.num_rfid_uids < MAX_RFID_UIDS) {
                currentConfigState = MENU_ADD_RFID;
-               // FIX: Wake up reader when entering Add Mode
+               // Wake up reader when entering Add Mode
                rfid.PCD_Init(); 
             }
             else safePlay(SOUND_MENU_CANCEL);
