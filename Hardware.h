@@ -1,6 +1,7 @@
 // Hardware.h
-//VERSION: 2.1.0
-// 12.28.2025
+// VERSION: 2.2.0
+// FIXED: Buzzer Whine (Detach Pin)
+// ADDED: safePlay() to prevent DFPlayer Lockups
 
 #pragma once
 #include <Wire.h>
@@ -28,6 +29,10 @@ extern Bounce2::Button disarmButton;
 extern Bounce2::Button armSwitch;
 extern CRGB leds[NUM_LEDS];
 extern Keypad keypad;
+
+// Audio Cooldown Vars
+static uint32_t lastAudioCmdTime = 0;
+static const uint32_t AUDIO_COOLDOWN_MS = 100; // Minimum time between serial commands
 
 inline void initHardware() {
   // FastLED
@@ -57,20 +62,32 @@ inline void initHardware() {
   armSwitch.interval(25);
   armSwitch.update();
 
-  pinMode(BEEP_BUZZER_PIN, OUTPUT);
-#if 1 // USE_LEDC_BEEP
-  const int BEEP_LEDC_CH = 4;
-  ledcAttachPin(BEEP_BUZZER_PIN, BEEP_LEDC_CH);
-  ledcWrite(BEEP_LEDC_CH, 0);
-#endif
+  // Buzzer Setup handled in beepStart/Stop dynamically to prevent whine
 }
 
-// Beeper (LEDC or tone) — using LEDC by default
+// --- AUDIO SAFE WRAPPER ---
+// Prevents DFPlayer lockups by rate-limiting commands
+inline void safePlay(int track) {
+  if (millis() - lastAudioCmdTime > AUDIO_COOLDOWN_MS) {
+    myDFPlayer.play(track);
+    lastAudioCmdTime = millis();
+  } else {
+    // Optional: Log dropped sound or simple ignore
+    // Serial.println("[AUDIO] Skipped track (too fast)");
+  }
+}
+
+// --- BUZZER CONTROL ---
+static const int BEEP_LEDC_CH = 4;
+
 inline void beepStart(int freqHz) {
-  const int BEEP_LEDC_CH = 4;
+  // Re-attach pin only when needed
+  ledcAttachPin(BEEP_BUZZER_PIN, BEEP_LEDC_CH);
   ledcWriteTone(BEEP_LEDC_CH, freqHz);
 }
+
 inline void beepStop() {
-  const int BEEP_LEDC_CH = 4;
+  // Write 0 AND Detach to ensure absolute silence (no whine)
   ledcWrite(BEEP_LEDC_CH, 0);
+  ledcDetachPin(BEEP_BUZZER_PIN); 
 }

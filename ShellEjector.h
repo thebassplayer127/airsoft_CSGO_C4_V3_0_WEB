@@ -1,6 +1,6 @@
 // ShellEjector.h
-// VERSION: 1.9.0
-// FIXED: Added Fallback PIN definition to ensure compilation/running
+// VERSION: 2.0.0
+// FIXED: Servo attach/detach logic to prevent jitter and conflicts
 
 #pragma once
 #include <Arduino.h>
@@ -8,34 +8,32 @@
 #include "Pins.h"
 
 // --- FALLBACK CONFIGURATION ---
-// If SERVO_PIN is missing from Pins.h, we force it to A2 here.
 #ifndef SERVO_PIN
 #define SERVO_PIN A2
 #endif
 
 // --- CONFIGURATION ---
 static const int      SERVO_NEUTRAL_ANGLE   = 0;    
-static const int      SERVO_TRIGGER_ANGLE   = 120; 
-static const uint32_t SERVO_TRIGGER_DELAY   = 0;   
+static const int      SERVO_TRIGGER_ANGLE   = 90; // Actuate 90 degrees
 static const uint32_t SERVO_HOLD_TIME       = 1000; 
 
 // Internal State
 Servo myServo;
-enum EjectorState { EJECTOR_IDLE, EJECTOR_WAITING, EJECTOR_EXTENDED, EJECTOR_RETRACTING };
+enum EjectorState { EJECTOR_IDLE, EJECTOR_EXTENDED, EJECTOR_RETRACTING };
 static EjectorState ejectorState = EJECTOR_IDLE;
 static uint32_t ejectorTimer = 0;
 
 inline void initShellEjector() {
 #ifdef SERVO_PIN
-  // 1. Attach at startup
-  myServo.setPeriodHertz(50); 
-  int ch = myServo.attach(SERVO_PIN);
-  
-  // Set initial position
-  myServo.write(SERVO_NEUTRAL_ANGLE);
+  // DO NOT attach at startup. Attach only when needed.
+  // This prevents the servo library from consuming a timer or interfering with LEDC 
+  // until the explosion actually happens.
   ejectorState = EJECTOR_IDLE;
+  // Ensure pin is output but low
+  pinMode(SERVO_PIN, OUTPUT);
+  digitalWrite(SERVO_PIN, LOW);
   
-  Serial.printf("[SERVO] Initialized on Pin %d (Channel %d)\n", SERVO_PIN, ch);
+  Serial.printf("[SERVO] Initialized (Lazy Attach) on Pin %d\n", SERVO_PIN);
 #else
   Serial.println("[SERVO] ERROR: SERVO_PIN NOT DEFINED!");
 #endif
@@ -43,7 +41,13 @@ inline void initShellEjector() {
 
 inline void startShellEjectorSequence() {
   #ifdef SERVO_PIN
-    Serial.println("[SERVO] POP! (Moving to Trigger Angle)");
+    Serial.println("[SERVO] POP! (Attaching & Moving)");
+    
+    // Attach specifically for this action
+    myServo.setPeriodHertz(50);
+    myServo.attach(SERVO_PIN);
+    
+    // Move
     myServo.write(SERVO_TRIGGER_ANGLE);
     ejectorState = EJECTOR_EXTENDED;
     ejectorTimer = millis();
@@ -64,10 +68,11 @@ inline void updateShellEjector() {
       ejectorTimer = millis(); 
     }
   }
-  // Phase 2: Wait for return
+  // Phase 2: Wait for return, then Detach
   else if (ejectorState == EJECTOR_RETRACTING) {
     if (elapsed >= 1000) { 
-      Serial.println("[SERVO] Sequence Complete.");
+      Serial.println("[SERVO] Sequence Complete. Detaching.");
+      myServo.detach(); // Release resource
       ejectorState = EJECTOR_IDLE;
     }
   }

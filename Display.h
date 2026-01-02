@@ -1,7 +1,8 @@
 // Display.h
-// VERSION: 4.6.0
+// VERSION: 4.7.0
 // FIXED: Flashing, Easter Egg Lighting Persistence
 // ADDED: PROP_DUD Display and LED logic
+// FIXED: Split Network Menu (Pages 1 & 2)
 
 #pragma once
 #include "State.h"
@@ -106,17 +107,17 @@ inline void updateDisplay() {
       } break;
 
       case MENU_NETWORK: {
-        centerPrintC("NETWORK", 0);
-        clearRow(1); lcd.setCursor(0,1); lcd.print("WiFi: "); lcd.print(settings.wifi_enabled ? "ON" : "OFF");
-        clearRow(2); lcd.setCursor(0,2); lcd.print("Mode: "); lcd.print(settings.net_use_mdns ? "mDNS" : "StaticIP");
-        clearRow(3); lcd.setCursor(0,3); lcd.print("1 WiFi 2 Mode 3 IP");
+        centerPrintC("NETWORK (Pg 1/2)", 0);
+        clearRow(1); lcd.setCursor(0,1); lcd.print("1 WiFi: "); lcd.print(settings.wifi_enabled ? "ON" : "OFF");
+        clearRow(2); lcd.setCursor(0,2); lcd.print("2 Mode: "); lcd.print(settings.net_use_mdns ? "mDNS" : "IP");
+        clearRow(3); lcd.setCursor(0,3); lcd.print("3 IP 4 Port 9 Next");
       } break;
 
      case MENU_NETWORK_2: {
-        centerPrintC("NETWORK", 0);
-        clearRow(1); lcd.setCursor(0,1); lcd.print("4 Port 5 MasterIP");
-        clearRow(2); lcd.setCursor(0,2); lcd.print("6 Portal 7 Apply");
-        clearRow(3); lcd.setCursor(0,3); lcd.print("8 Forget WiFi  9 Pg1");
+        centerPrintC("NETWORK (Pg 2/2)", 0);
+        clearRow(1); lcd.setCursor(0,1); lcd.print("5 MasterIP: "); lcd.print(ipToString(settings.master_ip));
+        clearRow(2); lcd.setCursor(0,2); lcd.print("6 Setup 7 Apply");
+        clearRow(3); lcd.setCursor(0,3); lcd.print("8 Forget  9 Back");
       } break;
 
       case MENU_NET_ENABLE: {

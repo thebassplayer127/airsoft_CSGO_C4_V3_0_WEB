@@ -1,5 +1,6 @@
 // Utils.h
-//VERSION: 2.0.3
+//VERSION: 2.1.0
+// FIXED: Updated menu sounds to use safePlay()
 
 #pragma once
 #include <Arduino.h>
@@ -14,21 +15,21 @@
 
 inline void menuClick(uint16_t trackNav = SOUND_MENU_NAV) {
 #if MENU_SOUNDS
-  myDFPlayer.play(trackNav);
+  safePlay(trackNav);
 #else
   beepStart(2400);
 #endif
 }
 inline void menuConfirm(uint16_t trackOk = SOUND_MENU_CONFIRM) {
 #if MENU_SOUNDS
-  myDFPlayer.play(trackOk);
+  safePlay(trackOk);
 #else
   beepStart(1800);
 #endif
 }
 inline void menuCancel(uint16_t trackErr = SOUND_MENU_CANCEL) {
 #if MENU_SOUNDS
-  myDFPlayer.play(trackErr);
+  safePlay(trackErr);
 #else
   beepStart(800);
 #endif
@@ -81,7 +82,7 @@ inline void restartPump() {
   if (g_restartAtMs == 0) return;
 
   int32_t remaining = (int32_t)(g_restartAtMs - millis());
-  if ((millis() - lastLog) > 250) {           // throttle logs to ~4/s
+  if ((millis() - lastLog) > 250) {           
     lastLog = millis();
     Serial.printf("[REBOOT] pending… now=%u target=%u remaining=%ld ms\n",
                   (unsigned)millis(), (unsigned)g_restartAtMs, (long)remaining);
@@ -89,7 +90,12 @@ inline void restartPump() {
 
   if (remaining <= 0) {
     Serial.println("[REBOOT] firing now: stopping audio/LED, restarting ESP");
-    beepStop();
+    beepStop(); // Ensure silence
+    
+    // Stop Servo
+    extern Servo myServo;
+    if (myServo.attached()) myServo.detach();
+
     delay(50);
     ESP.restart();
   }

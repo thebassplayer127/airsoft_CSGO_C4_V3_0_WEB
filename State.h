@@ -1,7 +1,7 @@
 // State.h
-// VERSION: 4.7.1
+// VERSION: 4.8.0
+// FIXED: Replaced myDFPlayer.play with safePlay()
 // FIXED: Dud Logic moves to State Entry (Pre-Sound)
-// ADDED: PROP_DUD State
 
 #pragma once
 #include "Config.h"
@@ -128,63 +128,59 @@ inline void setState(PropState newState) {
 
   switch (newState) {
     case PROP_IDLE:
-      myDFPlayer.play(SOUND_ARM_SWITCH_ON);
+      safePlay(SOUND_ARM_SWITCH_ON);
       break;
 
     case STANDBY:
       if (oldState != AWAIT_ARM_TOGGLE) {
-        myDFPlayer.play(SOUND_ARM_SWITCH_OFF);
+        safePlay(SOUND_ARM_SWITCH_OFF);
       }
       break;
       
     case STARWARS_PRE_GAME:
-      myDFPlayer.play(SOUND_POWER_LIGHTSABER); 
+      safePlay(SOUND_POWER_LIGHTSABER); 
       break;
 
     case DISARMING_MANUAL:
     case DISARMING_RFID:
       disarmStartTimestamp = millis();
-      myDFPlayer.play(SOUND_DISARM_BEGIN);
+      safePlay(SOUND_DISARM_BEGIN);
       break;
 
     case DISARMED:
       if (terminatorModeActive) {
-         myDFPlayer.play(SOUND_NOT_KILL_ANYONE); 
+         safePlay(SOUND_NOT_KILL_ANYONE); 
          nextTrackToPlay = SOUND_DISARM_SUCCESS_2; 
       } 
       else {
-         myDFPlayer.play(SOUND_DISARM_SUCCESS_1);
+         safePlay(SOUND_DISARM_SUCCESS_1);
          nextTrackToPlay = SOUND_DISARM_SUCCESS_2; 
       }
       break;
 
     case PRE_EXPLOSION: {
-      // Logic: Determine if DUD or EXPLOSION *before* playing sounds
       bool isDud = false;
-      // Terminator mode usually overrides Dud logic (unless desired otherwise)
       if (settings.dud_enabled && !terminatorModeActive) {
         if (random(1, 101) <= settings.dud_chance) isDud = true;
       }
 
       if (isDud) {
-        setState(PROP_DUD); // Transition immediately to DUD state
+        setState(PROP_DUD); 
         return; 
       }
 
-      // If we are here, it is a REAL explosion
       myDFPlayer.stop(); 
       delay(50); 
       
       doomModeActive = false; 
       
       if (terminatorModeActive) {
-         myDFPlayer.play(SOUND_ILL_BE_BACK); 
+         safePlay(SOUND_ILL_BE_BACK); 
       }
       else {
-         myDFPlayer.play(SOUND_DETONATION_NEW);
+         safePlay(SOUND_DETONATION_NEW);
       }
       
-      // CRITICAL: Call Servo Trigger here.
       startShellEjectorSequence(); 
     } break;
       
@@ -194,23 +190,19 @@ inline void setState(PropState newState) {
     case PROP_DUD:
       myDFPlayer.stop();
       delay(50);
-      myDFPlayer.play(SOUND_DUD_FAIL);
-      // Wait for sound to finish in printDetail to reset
+      safePlay(SOUND_DUD_FAIL);
       break;
 
     case EASTER_EGG:
-      // Master Code Logic: Play sound AND transition to ARMED
       easterEggActive = true; 
-      myDFPlayer.play(random(SOUND_EASTER_EGG_START, SOUND_EASTER_EGG_END + 1));
-      
-      // Transition to Armed immediately after sound starts (non-blocking)
+      safePlay(random(SOUND_EASTER_EGG_START, SOUND_EASTER_EGG_END + 1));
       bombArmedTimestamp = millis();
       c4OnEnterArmed();
       setState(ARMED); 
       break;
 
     case EASTER_EGG_2:
-      myDFPlayer.play(SOUND_JUGS); 
+      safePlay(SOUND_JUGS); 
       break;
       
     default: break;
@@ -223,57 +215,48 @@ inline void printDetail(uint8_t type, int value) {
     
     if (currentState == EXPLODED) return;
 
-    // 1. Doom Logic
     if (doomModeActive && value == SOUND_DOOM_SLAYER) {
-      myDFPlayer.play(SOUND_RIP_TEAR); 
+      safePlay(SOUND_RIP_TEAR); 
     }
 
-    // 2. Bond Logic
     if (bondModeActive && value == SOUND_BOND_INTRO) {
-      myDFPlayer.play(SOUND_BOND_THEME);
+      safePlay(SOUND_BOND_THEME);
     }
 
-    // 3. Detonation Finished
     if (value == SOUND_DETONATION_NEW) {
       setState(EXPLODED); 
       nextTrackToPlay = 0;
       return; 
     }
 
-    // 4. Terminator Detonation Finished
     if (value == SOUND_ILL_BE_BACK) {
         setState(EXPLODED);
         nextTrackToPlay = 0;
         return;
     }
 
-    // 5. Dud Sound Finished
     if (value == SOUND_DUD_FAIL) {
-       // Reset game after Dud sound finishes
        setState(STANDBY); 
        nextTrackToPlay = 0;
        return;
     }
 
-    // 6. Easter Egg 2 (Jugs)
     if (currentState == EASTER_EGG_2 && value == SOUND_JUGS) {
        bombArmedTimestamp = millis();
-       myDFPlayer.play(SOUND_BOMB_PLANTED);
+       safePlay(SOUND_BOMB_PLANTED);
        c4OnEnterArmed();
        setState(ARMED);
        nextTrackToPlay = 0;
        return;
     }
     
-    // 7. Easter Egg 1 Logic (Reset Lights)
     if (value >= SOUND_EASTER_EGG_START && value <= SOUND_EASTER_EGG_END) {
         easterEggActive = false;
     }
 
-    // 8. Standard chaining
     int track = nextTrackToPlay; nextTrackToPlay = 0;
     if (track != 0) {
-      myDFPlayer.play(track);
+      safePlay(track);
     }
   }
 }
