@@ -1,6 +1,7 @@
 // State.h
-// VERSION: 4.6.0
-// FIXED: Easter Egg Lighting Reset on Track Finish
+// VERSION: 4.7.1
+// FIXED: Dud Logic moves to State Entry (Pre-Sound)
+// ADDED: PROP_DUD State
 
 #pragma once
 #include "Config.h"
@@ -26,7 +27,8 @@ enum PropState {
   DISARMING_MANUAL, DISARMING_RFID, DISARMED, PRE_EXPLOSION, EXPLODED, 
   EASTER_EGG, EASTER_EGG_2,
   CONFIG_MODE,
-  STARWARS_PRE_GAME 
+  STARWARS_PRE_GAME,
+  PROP_DUD  // New State for Dud Logic
 };
 
 // Config/menu states
@@ -73,6 +75,7 @@ inline const char* getStateName(PropState state) {
     case EASTER_EGG_2: return "EASTER_EGG_2";
     case CONFIG_MODE: return "CONFIG_MODE";
     case STARWARS_PRE_GAME: return "STARWARS_PRE";
+    case PROP_DUD: return "PROP_DUD";
     default: return "UNKNOWN";
   }
 }
@@ -117,6 +120,7 @@ inline void setState(PropState newState) {
     case EXPLODED:
     case STANDBY:
     case AWAIT_ARM_TOGGLE:
+    case PROP_DUD:
       beepStop();
       break;
     default: break;
@@ -154,7 +158,20 @@ inline void setState(PropState newState) {
       }
       break;
 
-    case PRE_EXPLOSION:
+    case PRE_EXPLOSION: {
+      // Logic: Determine if DUD or EXPLOSION *before* playing sounds
+      bool isDud = false;
+      // Terminator mode usually overrides Dud logic (unless desired otherwise)
+      if (settings.dud_enabled && !terminatorModeActive) {
+        if (random(1, 101) <= settings.dud_chance) isDud = true;
+      }
+
+      if (isDud) {
+        setState(PROP_DUD); // Transition immediately to DUD state
+        return; 
+      }
+
+      // If we are here, it is a REAL explosion
       myDFPlayer.stop(); 
       delay(50); 
       
@@ -169,9 +186,16 @@ inline void setState(PropState newState) {
       
       // CRITICAL: Call Servo Trigger here.
       startShellEjectorSequence(); 
-      break;
+    } break;
       
     case EXPLODED:
+      break;
+    
+    case PROP_DUD:
+      myDFPlayer.stop();
+      delay(50);
+      myDFPlayer.play(SOUND_DUD_FAIL);
+      // Wait for sound to finish in printDetail to reset
       break;
 
     case EASTER_EGG:
@@ -209,19 +233,10 @@ inline void printDetail(uint8_t type, int value) {
       myDFPlayer.play(SOUND_BOND_THEME);
     }
 
-    // 3. Detonation -> Check for Dud
+    // 3. Detonation Finished
     if (value == SOUND_DETONATION_NEW) {
-      bool isDud = false;
-      if (settings.dud_enabled) {
-        if (random(1, 101) <= settings.dud_chance) isDud = true;
-      }
-
-      if (isDud) {
-        myDFPlayer.play(SOUND_DUD_FAIL); 
-      } else {
-        setState(EXPLODED); 
-        nextTrackToPlay = 0;
-      }
+      setState(EXPLODED); 
+      nextTrackToPlay = 0;
       return; 
     }
 
@@ -234,7 +249,8 @@ inline void printDetail(uint8_t type, int value) {
 
     // 5. Dud Sound Finished
     if (value == SOUND_DUD_FAIL) {
-       setState(EXPLODED); 
+       // Reset game after Dud sound finishes
+       setState(STANDBY); 
        nextTrackToPlay = 0;
        return;
     }

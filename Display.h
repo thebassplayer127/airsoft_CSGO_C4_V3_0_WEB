@@ -1,6 +1,7 @@
 // Display.h
-// VERSION: 4.5.0
-// ADDED: Star Wars Pre-Game Visuals, Fixed Flashing, Easter Egg Lighting Persistence
+// VERSION: 4.6.0
+// FIXED: Flashing, Easter Egg Lighting Persistence
+// ADDED: PROP_DUD Display and LED logic
 
 #pragma once
 #include "State.h"
@@ -309,6 +310,11 @@ inline void updateDisplay() {
         centerPrintC("5318008", 1);
         centerPrintC("ARMING...", 2);
         break;
+        
+      case PROP_DUD:
+        centerPrintC("FAILED TO", 1);
+        centerPrintC("DETONATE", 2);
+        break;
 
       default: break;
     }
@@ -354,6 +360,10 @@ inline void updateLeds() {
     } break;
     case EASTER_EGG_2:
       leds[0] = CRGB::HotPink; 
+      break;
+    case PROP_DUD:
+      // Custom effect: Toggle Purple/Orange
+      leds[0] = ((millis() / 250) % 2 == 0) ? CRGB::Purple : CRGB::Orange;
       break;
     case CONFIG_MODE: leds[0] = CRGB::DeepPink; break;
     default: break;

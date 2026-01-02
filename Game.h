@@ -1,6 +1,7 @@
 // Game.h
-// VERSION: 4.7.0
-// ADDED: Servo Test Code (999#)
+// VERSION: 4.8.0
+// FIXED: Short code disarm logic
+// FIXED: RFID disarm blocking when typing code
 
 #pragma once
 #include <Arduino.h>
@@ -62,7 +63,7 @@ inline void handleArmSwitch() {
 
   // --- NORMAL LOGIC ---
   if (armSwitch.rose()) {
-    if (currentState == DISARMED || currentState == EXPLODED || currentState == PROP_IDLE || currentState == AWAIT_ARM_TOGGLE) {
+    if (currentState == DISARMED || currentState == EXPLODED || currentState == PROP_IDLE || currentState == AWAIT_ARM_TOGGLE || currentState == PROP_DUD) {
       resetSpecialModes(); 
       setState(STANDBY);
     }
@@ -113,10 +114,21 @@ inline void handleKeypadInput(char key) {
       enteredCode[len] = key;
       enteredCode[len + 1] = '\0';
     }
-    if (currentState == DISARMING_KEYPAD && (int)strlen(enteredCode) == CODE_LENGTH) {
-      if (strcmp(enteredCode, activeArmCode) == 0 || strcmp(enteredCode, MASTER_CODE) == 0) {
+    
+    // --- Disarm Check Logic ---
+    if (currentState == DISARMING_KEYPAD) {
+      bool matched = false;
+      
+      // Check 1: Matches the code used to arm (handles short Easter egg codes)
+      if (strcmp(enteredCode, activeArmCode) == 0) matched = true;
+      // Check 2: Matches master code
+      else if (strcmp(enteredCode, MASTER_CODE) == 0) matched = true;
+
+      if (matched) {
         setState(DISARMED);
-      } else {
+      } 
+      // Only apply penalty if code is full length AND didn't match
+      else if ((int)strlen(enteredCode) >= CODE_LENGTH) {
         uint32_t elapsed = millis() - bombArmedTimestamp;
         uint32_t total   = settings.bomb_duration_ms;
         uint32_t remaining = (total > elapsed) ? (total - elapsed) : 0;
@@ -128,6 +140,8 @@ inline void handleKeypadInput(char key) {
         setState(ARMED);
       }
     }
+    // --------------------------
+
   } else if (key == '*') {
     if (millis() - lastStarPressTime < DOUBLE_TAP_TIMEOUT) {
       if (currentState == ARMING) setState(PROP_IDLE);
@@ -225,6 +239,7 @@ inline void handleKeypadInput(char key) {
          myDFPlayer.play(SOUND_MGS_ALERT);
          c4OnEnterArmed(); setState(ARMED);
 
+      // J. Zeroes
       } else if (strcmp(enteredCode, "0000000") == 0) {
          centerPrintC("TOO EASY", 1);
          myDFPlayer.play(SOUND_LAME);
@@ -232,6 +247,7 @@ inline void handleKeypadInput(char key) {
          enteredCode[0] = '\0';
          setState(PROP_IDLE);
 
+      // K. Doom
       } else if (strcmp(enteredCode, "666666") == 0) { // DOOM
          doomModeActive = true;
          strcpy(activeArmCode, enteredCode);
@@ -239,6 +255,7 @@ inline void handleKeypadInput(char key) {
          myDFPlayer.play(SOUND_DOOM_SLAYER); 
          setState(ARMED);
       
+      // L. Jugs
       } else if (strcmp(enteredCode, "5318008") == 0) {
           strcpy(activeArmCode, enteredCode);
           setState(EASTER_EGG_2);
@@ -303,8 +320,13 @@ inline void handleRfid() {
       isAuthorized = true; break;
     }
   }
-  if (isAuthorized && currentState == ARMED) setState(DISARMING_RFID);
-  else if (!isAuthorized) myDFPlayer.play(SOUND_INVALID_CARD);
+  // FIXED: Allow RFID disarm even if halfway through typing code (DISARMING_KEYPAD)
+  if (isAuthorized && (currentState == ARMED || currentState == DISARMING_KEYPAD)) {
+    setState(DISARMING_RFID);
+  }
+  else if (!isAuthorized) {
+    myDFPlayer.play(SOUND_INVALID_CARD);
+  }
 
   rfid.PICC_HaltA();
   rfid.PCD_StopCrypto1();
