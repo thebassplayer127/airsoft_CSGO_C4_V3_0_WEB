@@ -1,8 +1,6 @@
 // Game.h
-// VERSION: 5.2.0
-// FIXED: Robust Beep Logic (Cycle-based)
-// FIXED: Menu Exit No Save (Now keeps RAM changes, no reboot)
-// FIXED: Removed duplicate servo flag (now in State.h)
+// VERSION: 5.6.0
+// FIXED: RFID Reader Re-Init on Add Menu Entry (Fixes "Not Reading" bug)
 
 #pragma once
 #include <Arduino.h>
@@ -299,8 +297,7 @@ inline void handleRfid() {
 }
 
 inline void handleBeepLogic() {
-  // --- FIX 2: Robust Beep State Machine ---
-  // Prevents "short/long" glitches caused by loop timing
+  // --- Robust Beep State Machine ---
   
   uint32_t elapsed = millis() - bombArmedTimestamp;
   if (elapsed > settings.bomb_duration_ms) elapsed = settings.bomb_duration_ms;
@@ -319,7 +316,6 @@ inline void handleBeepLogic() {
   }
 
   // --- Cycle Calculation ---
-  // If the time since last beep start exceeds interval, we start a new cycle
   uint32_t delta = millis() - lastBeepTimestamp;
   if (delta >= interval) {
      lastBeepTimestamp = millis();
@@ -327,7 +323,6 @@ inline void handleBeepLogic() {
   }
 
   // Robust ON/OFF Logic
-  // Only trigger start/stop ONCE when state changes
   static bool isBeeping = false;
   
   if (delta < currentBeepDuration) {
@@ -377,9 +372,7 @@ inline void handleConfigMode(char key) {
               requestRestart(600);
             } break;
             case 9: {
-              // --- FIX 3: Exit without saving changes to EEPROM, BUT KEEP RAM ---
-              // Previously this rebooted the device, resetting changes to defaults.
-              // Now it simply exits the menu, keeping your session edits active.
+              // Exit without saving changes to EEPROM, BUT KEEP RAM
               currentConfigState = MENU_EXIT_NO_SAVE;
               displayNeedsUpdate = true;
               safePlay(SOUND_MENU_CANCEL);
@@ -503,7 +496,11 @@ inline void handleConfigMode(char key) {
         if (key == '#') {
           if (rfidViewIndex < settings.num_rfid_uids) {
           } else if (rfidViewIndex == settings.num_rfid_uids) {
-            if (settings.num_rfid_uids < MAX_RFID_UIDS) currentConfigState = MENU_ADD_RFID;
+            if (settings.num_rfid_uids < MAX_RFID_UIDS) {
+               currentConfigState = MENU_ADD_RFID;
+               // FIX: Wake up reader when entering Add Mode
+               rfid.PCD_Init(); 
+            }
             else safePlay(SOUND_MENU_CANCEL);
           } else {
             currentConfigState = MENU_CLEAR_RFIDS_CONFIRM;

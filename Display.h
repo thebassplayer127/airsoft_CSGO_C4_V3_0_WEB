@@ -1,5 +1,6 @@
 // Display.h
-// VERSION: 5.4.0
+// VERSION: 5.5.0
+// OPTIMIZED: Throttled display updates (50ms) to fix sluggish keypad
 // FIXED: Updated Exit Menu Text
 
 #pragma once
@@ -39,6 +40,10 @@ inline String modeToStr(uint8_t v){ return v?String("mDNS"):String("StaticIP"); 
 // --- Main Display Logic ---
 
 inline void updateDisplay() {
+  static uint32_t lastDisplayUpdate = 0;
+  uint32_t now = millis();
+
+  // 1. CONFIG MODE (Menu System)
   if (currentState == CONFIG_MODE) {
     if (!displayNeedsUpdate) return;
     displayNeedsUpdate = false;
@@ -53,7 +58,7 @@ inline void updateDisplay() {
           "Bomb Time", "Manual Disarm", "RFID Disarm",
           "Sudden Death", "Dud Settings", 
           "RFID Tags", "Settings & Servo", "Network",
-          "Save & Exit", "Exit" // Changed from "Exit (No Save)"
+          "Save & Exit", "Exit" 
         };
         const int TOTAL = 10; 
 
@@ -245,6 +250,15 @@ inline void updateDisplay() {
 
   // ---------- Normal Gameplay Overlay ----------
   if (currentState >= ARMED && currentState < DISARMED) {
+    
+    // OPTIMIZATION: Only update the timer every 50ms (20fps).
+    // Updating every loop (1ms) chokes the keypad.
+    // However, if we are entering a new mode (displayNeedsUpdate), force it.
+    if (!displayNeedsUpdate && (now - lastDisplayUpdate < 50)) {
+        return; 
+    }
+    lastDisplayUpdate = now;
+
     int32_t remaining_ms = (int32_t)settings.bomb_duration_ms - (int32_t)(millis() - bombArmedTimestamp);
     if (remaining_ms < 0) remaining_ms = 0;
     int seconds = remaining_ms / 1000;
@@ -297,7 +311,10 @@ inline void updateDisplay() {
         default: break;
       }
     }
-  } else if (displayNeedsUpdate) {
+  } 
+  
+  // ---------- Static Status Screens (Non-Timing) ----------
+  else if (displayNeedsUpdate) {
     displayNeedsUpdate = false;
     lcd.clear(); yield();
 

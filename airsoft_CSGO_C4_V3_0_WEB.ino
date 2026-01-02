@@ -1,10 +1,11 @@
 /*
   PROJECT: Counter-Strike C4 Prop (Project 2)
-  VERSION: 3.6.0 (Re-print for consistency)
+  VERSION: 3.7.0
   DATE: 2025-10-26
   AUTHOR: Andrew Florio
 
   Header-only modular structure for Arduino IDE, with Wi-Fi + mDNS + WebSocket.
+  OPTIMIZATION: Throttled LED updates to improve Keypad responsiveness.
 */
 
 #include <Arduino.h>
@@ -164,7 +165,15 @@ void loop() {
   }
 
   updateDisplay();
-  updateLeds();
+  
+  // OPTIMIZATION: Throttle LEDs to ~33 FPS (30ms)
+  // Updating LEDs every loop (1ms) disables interrupts and lags Keypad.
+  static uint32_t lastLedUpdate = 0;
+  if (millis() - lastLedUpdate > 30) {
+      updateLeds();
+      lastLedUpdate = millis();
+  }
+  
   menuBeepPump();   
   restartPump();    
   updateShellEjector(); // Checks servo timing
