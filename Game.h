@@ -1,9 +1,8 @@
 // Game.h
-// VERSION: 4.9.0
-// FIXED: Buzzer Timing (Staccato Fix)
-// FIXED: Network Menu Pagination
-// FIXED: Replaced myDFPlayer.play with safePlay()
-// FIXED: Added delay before reboot to prevent freeze
+// VERSION: 5.1.0
+// FIXED: Beep Logic (Fixed Duration)
+// FIXED: Menu Structure (Exit options in Main)
+// FIXED: Servo/Strobe Sync (4500ms delay)
 
 #pragma once
 #include <Arduino.h>
@@ -22,6 +21,7 @@ bool terminatorModeActive = false;
 bool bondModeActive = false;
 bool suddenDeathActive = false;
 bool easterEggActive = false; 
+bool servoTriggeredThisExplosion = false; 
 
 inline bool parseIpFromBuffer(const char* buf, uint32_t& out) {
   int a,b,c,d;
@@ -160,74 +160,75 @@ inline void handleKeypadInput(char key) {
       }
 
       resetSpecialModes();
+      bool ee = settings.easter_eggs_enabled;
 
       // --- CHECK CODES ---
-      if (strcmp(enteredCode, "501") == 0) {
+      if (ee && strcmp(enteredCode, "501") == 0) {
          setState(STARWARS_PRE_GAME);
          enteredCode[0] = '\0'; 
-      } else if (strcmp(enteredCode, "1138") == 0) { 
+      } else if (ee && strcmp(enteredCode, "1138") == 0) { 
          strcpy(activeArmCode, enteredCode);
          bombArmedTimestamp = millis();
          safePlay(SOUND_THX); 
          c4OnEnterArmed(); setState(ARMED);
-      } else if (strcmp(enteredCode, "8675309") == 0) {
+      } else if (ee && strcmp(enteredCode, "8675309") == 0) {
          strcpy(activeArmCode, enteredCode);
          settings.bomb_duration_ms = 222000;
          bombArmedTimestamp = millis();
          safePlay(SOUND_JENNY); 
          c4OnEnterArmed(); setState(ARMED);
-      } else if (strcmp(enteredCode, "3141592") == 0) {
+      } else if (ee && strcmp(enteredCode, "3141592") == 0) {
          strcpy(activeArmCode, enteredCode);
          bombArmedTimestamp = millis();
          safePlay(SOUND_NERD); 
          c4OnEnterArmed(); setState(ARMED);
-      } else if (strcmp(enteredCode, "1984") == 0) {
+      } else if (ee && strcmp(enteredCode, "1984") == 0) {
          terminatorModeActive = true;
          strcpy(activeArmCode, enteredCode);
          bombArmedTimestamp = millis();
          safePlay(SOUND_HASTA_2); 
          c4OnEnterArmed(); setState(ARMED);
-      } else if (strcmp(enteredCode, "7777777") == 0) {
+      } else if (ee && strcmp(enteredCode, "7777777") == 0) {
          strcpy(activeArmCode, enteredCode);
          bombArmedTimestamp = millis();
          safePlay(SOUND_JACKPOT); 
          c4OnEnterArmed(); setState(ARMED);
-      } else if (strcmp(enteredCode, "007") == 0) {
+      } else if (ee && strcmp(enteredCode, "007") == 0) {
          bondModeActive = true;
          strcpy(activeArmCode, enteredCode);
          settings.bomb_duration_ms = 105000;
          bombArmedTimestamp = millis();
          safePlay(SOUND_BOND_INTRO); 
          c4OnEnterArmed(); setState(ARMED);
-      } else if (strcmp(enteredCode, "12345") == 0) {
+      } else if (ee && strcmp(enteredCode, "12345") == 0) {
          centerPrintC("IDIOT LUGGAGE?", 1);
          safePlay(SOUND_SPACEBALLS);
          delay(2500);
          enteredCode[0] = '\0';
          setState(PROP_IDLE);
-      } else if (strcmp(enteredCode, "0451") == 0) {
+      } else if (ee && strcmp(enteredCode, "0451") == 0) {
          strcpy(activeArmCode, enteredCode);
          bombArmedTimestamp = millis();
          safePlay(SOUND_SOM_BITCH); 
          c4OnEnterArmed(); setState(ARMED);
-      } else if (strcmp(enteredCode, "14085") == 0) {
+      } else if (ee && strcmp(enteredCode, "14085") == 0) {
          strcpy(activeArmCode, enteredCode);
          bombArmedTimestamp = millis();
          safePlay(SOUND_MGS_ALERT);
          c4OnEnterArmed(); setState(ARMED);
-      } else if (strcmp(enteredCode, "0000000") == 0) {
+      } else if (ee && strcmp(enteredCode, "0000000") == 0) {
          centerPrintC("TOO EASY", 1);
          safePlay(SOUND_LAME);
          delay(1500);
          enteredCode[0] = '\0';
          setState(PROP_IDLE);
-      } else if (strcmp(enteredCode, "666666") == 0) { 
+      } else if (ee && strcmp(enteredCode, "666666") == 0) { 
          doomModeActive = true;
          strcpy(activeArmCode, enteredCode);
          bombArmedTimestamp = millis();
          safePlay(SOUND_DOOM_SLAYER); 
          setState(ARMED);
-      } else if (strcmp(enteredCode, "5318008") == 0) {
+      } else if (ee && strcmp(enteredCode, "5318008") == 0) {
           strcpy(activeArmCode, enteredCode);
           setState(EASTER_EGG_2);
 
@@ -309,18 +310,22 @@ inline void handleBeepLogic() {
   float bps = 1.05f * powf(1.039f, virtual_t);
   uint32_t interval = (uint32_t)(1000.0f / bps);
 
-  // New Logic: Scale beep duration so it never overlaps the next beep
-  // Cap duration at 50% of the interval to ensure "staccato" separation
-  uint32_t dynamicDuration = min(BEEP_TONE_DURATION_MS, interval / 2);
-  if (dynamicDuration < 50) dynamicDuration = 50; // Minimum chirp length
+  // FIXED LOGIC: Strict duration enforcement
+  // Normal Beep: 125ms
+  // Panic Beep: 50% of interval (if interval < 250ms)
+  uint32_t currentBeepDuration = BEEP_TONE_DURATION_MS;
+
+  if (interval < (BEEP_TONE_DURATION_MS * 2)) {
+     currentBeepDuration = interval / 2;
+  }
 
   if (millis() - lastBeepTimestamp >= interval) {
     lastBeepTimestamp = millis();
     beepStart(BEEP_TONE_FREQ);
     ledIsOn = true;
   } else {
-    // Turn off if duration exceeded
-    if (millis() - lastBeepTimestamp > dynamicDuration) {
+    // Cut off the beep strictly at the duration
+    if (millis() - lastBeepTimestamp > currentBeepDuration) {
       beepStop();
       ledIsOn = false;
     }
@@ -334,7 +339,7 @@ inline void handleConfigMode(char key) {
 
     switch(currentConfigState) {
       case MENU_MAIN: {
-        const int N = 8; 
+        const int N = 10; // Increased to 10 items
         if (key == '2') configMenuIndex = (configMenuIndex - 1 + N) % N;
         if (key == '8') configMenuIndex = (configMenuIndex + 1) % N;
         if (key == '#') {
@@ -347,16 +352,23 @@ inline void handleConfigMode(char key) {
             case 3: currentConfigState = MENU_SUDDEN_DEATH_TOGGLE; break;
             case 4: currentConfigState = MENU_DUD_SETTINGS; break;
             case 5: rfidViewIndex = 0; currentConfigState = MENU_VIEW_RFIDS; break;
-            case 6: currentConfigState = MENU_NETWORK; break; // Starts at Page 1
-            case 7: {
+            case 6: currentConfigState = MENU_EXTRAS_SUBMENU; break;
+            case 7: currentConfigState = MENU_NETWORK; break;
+            case 8: {
               Serial.println("[CFG] Save Exit");
               currentConfigState = MENU_SAVE_EXIT;
               displayNeedsUpdate = true;
               saveSettings();
               safePlay(SOUND_MENU_CONFIRM);
-              // Wait for EEPROM commit and Audio before scheduling reboot
               delay(100); 
               requestRestart(600);
+            } break;
+            case 9: {
+              currentConfigState = MENU_EXIT_NO_SAVE;
+              displayNeedsUpdate = true;
+              safePlay(SOUND_MENU_CANCEL);
+              delay(100);
+              requestRestart(200);
             } break;
           }
         }
@@ -410,6 +422,63 @@ inline void handleConfigMode(char key) {
         if (key == '*') currentConfigState = MENU_DUD_SETTINGS; 
       } break;
 
+      // --- EXTRAS SUBMENU ---
+      case MENU_EXTRAS_SUBMENU: {
+        if (key == '1') currentConfigState = MENU_SERVO_SETTINGS;
+        if (key == '2') currentConfigState = MENU_TOGGLE_EASTER_EGGS;
+        if (key == '3') currentConfigState = MENU_TOGGLE_STROBE;
+        if (key == '*') currentConfigState = MENU_MAIN;
+      } break;
+
+      // --- SERVO SETTINGS ---
+      case MENU_SERVO_SETTINGS: {
+        if (key == '1') currentConfigState = MENU_SERVO_TOGGLE;
+        if (key == '2') { configInputBuffer[0]='\0'; currentConfigState = MENU_SERVO_START_ANGLE; }
+        if (key == '3') { configInputBuffer[0]='\0'; currentConfigState = MENU_SERVO_END_ANGLE; }
+        if (key == '*') currentConfigState = MENU_EXTRAS_SUBMENU;
+      } break;
+
+      case MENU_SERVO_TOGGLE: {
+        if (key == '#') { settings.servo_enabled = !settings.servo_enabled; safePlay(SOUND_MENU_CONFIRM); }
+        if (key == '*') currentConfigState = MENU_SERVO_SETTINGS;
+      } break;
+
+      case MENU_SERVO_START_ANGLE: {
+        if (isdigit(key)) {
+            size_t len = strlen(configInputBuffer);
+            if (len + 1 < CONFIG_INPUT_MAX) { configInputBuffer[len] = key; configInputBuffer[len+1] = '\0'; }
+        }
+        if (key == '#') {
+            int val = atoi(configInputBuffer);
+            if (val >= 0 && val <= 180) { settings.servo_start_angle = val; safePlay(SOUND_MENU_CONFIRM); }
+            currentConfigState = MENU_SERVO_SETTINGS;
+        }
+        if (key == '*') currentConfigState = MENU_SERVO_SETTINGS;
+      } break;
+
+      case MENU_SERVO_END_ANGLE: {
+        if (isdigit(key)) {
+            size_t len = strlen(configInputBuffer);
+            if (len + 1 < CONFIG_INPUT_MAX) { configInputBuffer[len] = key; configInputBuffer[len+1] = '\0'; }
+        }
+        if (key == '#') {
+            int val = atoi(configInputBuffer);
+            if (val >= 0 && val <= 180) { settings.servo_end_angle = val; safePlay(SOUND_MENU_CONFIRM); }
+            currentConfigState = MENU_SERVO_SETTINGS;
+        }
+        if (key == '*') currentConfigState = MENU_SERVO_SETTINGS;
+      } break;
+
+      case MENU_TOGGLE_EASTER_EGGS: {
+         if (key == '#') { settings.easter_eggs_enabled = !settings.easter_eggs_enabled; safePlay(SOUND_MENU_CONFIRM); }
+         if (key == '*') currentConfigState = MENU_EXTRAS_SUBMENU;
+      } break;
+
+      case MENU_TOGGLE_STROBE: {
+         if (key == '#') { settings.explosion_strobe_enabled = !settings.explosion_strobe_enabled; safePlay(SOUND_MENU_CONFIRM); }
+         if (key == '*') currentConfigState = MENU_EXTRAS_SUBMENU;
+      } break;
+
       case MENU_VIEW_RFIDS: {
         int total = settings.num_rfid_uids + 2;
         if (key == '2') rfidViewIndex = (rfidViewIndex - 1 + total) % total;
@@ -434,22 +503,20 @@ inline void handleConfigMode(char key) {
       } break;
 
       case MENU_NETWORK: {
-        // Page 1: Enable(1), Mode(2), IP(3), Port(4) -> Next(9)
         if (key == '1')      currentConfigState = MENU_NET_ENABLE;
         else if (key == '2') currentConfigState = MENU_NET_SERVER_MODE;
         else if (key == '3') { currentConfigState = MENU_NET_IP;        configInputBuffer[0]='\0'; }
         else if (key == '4') { currentConfigState = MENU_NET_PORT;      configInputBuffer[0]='\0'; }
-        else if (key == '9') { currentConfigState = MENU_NETWORK_2; } // Go to Page 2
+        else if (key == '9') { currentConfigState = MENU_NETWORK_2; } 
         else if (key == '*') currentConfigState = MENU_MAIN;
       } break;
 
       case MENU_NETWORK_2: {
-         // Page 2: MasterIP(5), Portal(6), Apply(7), Forget(8) -> Back(9)
         if (key == '5') { currentConfigState = MENU_NET_MASTER_IP; configInputBuffer[0]='\0'; }
         else if (key == '6') { currentConfigState = MENU_NET_WIFI_SETUP; startWiFiPortal(90); }
         else if (key == '7') { currentConfigState = MENU_NET_APPLY_NOW;  networkReconfigure(); }
         else if (key == '8') currentConfigState = MENU_NET_FORGET_CONFIRM; 
-        else if (key == '9') currentConfigState = MENU_NETWORK; // Back to Page 1
+        else if (key == '9') currentConfigState = MENU_NETWORK; 
         else if (key == '*') currentConfigState = MENU_MAIN;
       } break;
 
@@ -526,6 +593,7 @@ inline void handleConfigMode(char key) {
       } break;
 
       case MENU_SAVE_EXIT: { } break;
+      case MENU_EXIT_NO_SAVE: { } break;
 
     }
   }
@@ -584,6 +652,17 @@ inline void serviceGameplay(char key) {
       handleBeepLogic();
       if (millis() - disarmStartTimestamp >= settings.rfid_disarm_time_ms)
         setState(DISARMED);
+      break;
+
+    // Trigger Servo/Strobe check inside gameplay loop when exploded/pre-exploded
+    case PRE_EXPLOSION:
+      // Timing Check: 4500ms after entry (sync with strobe)
+      if (settings.servo_enabled && !servoTriggeredThisExplosion) {
+         if (millis() - stateEntryTimestamp >= 4500) {
+             startShellEjectorSequence();
+             servoTriggeredThisExplosion = true;
+         }
+      }
       break;
 
     default:

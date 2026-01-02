@@ -1,18 +1,19 @@
 // Config.h
-// VERSION: 3.4.0
-//12.28.2025
+// VERSION: 3.5.0
+// ADDED: Servo Settings, Strobe Toggle, Easter Egg Toggle
+
 #pragma once
 #include <Arduino.h>
 #include <EEPROM.h>
 
 // Version
-static const char* FW_VERSION = "3.4.0";
+static const char* FW_VERSION = "3.5.0";
 
 // EEPROM / Settings
 #define EEPROM_SIZE 512
 #define MAX_RFID_UIDS 10
-#define SETTINGS_MAGIC    0xC4C40200
-#define SETTINGS_VERSION  3
+#define SETTINGS_MAGIC    0xC4C40201 // Magic changed for struct update
+#define SETTINGS_VERSION  4          // Version bumped
 
 struct Settings {
   uint32_t magic_number;
@@ -28,7 +29,13 @@ struct Settings {
   uint8_t  sudden_death_mode;  // 0=Off, 1=On
   uint8_t  dud_enabled;        // 0=Off, 1=On
   uint8_t  dud_chance;         // 1-100%
-  uint8_t  _pad_game;
+  
+  // --- NEW FEATURES V3.5 ---
+  uint8_t  servo_enabled;           // 0=Off, 1=On
+  uint8_t  servo_start_angle;       // e.g., 0
+  uint8_t  servo_end_angle;         // e.g., 90
+  uint8_t  easter_eggs_enabled;     // 0=Off, 1=On
+  uint8_t  explosion_strobe_enabled;// 0=Off, 1=On
 
   // RFID
   int32_t  num_rfid_uids;
@@ -60,7 +67,7 @@ static constexpr uint32_t EASTER_EGG_CYCLE_MS     = 100;
 
 // Audio / Visual
 static constexpr int      BEEP_TONE_FREQ          = 2500;
-static constexpr uint32_t BEEP_TONE_DURATION_MS   = 125;
+static constexpr uint32_t BEEP_TONE_DURATION_MS   = 125; // Fixed duration target
 static constexpr int      DFPLAYER_VOLUME         = 8;
 static constexpr int      NEOPIXEL_BRIGHTNESS     = 255;
 static constexpr size_t   CONFIG_INPUT_MAX        = 16;
@@ -75,10 +82,17 @@ inline void factoryResetSettings() {
   settings.manual_disarm_time_ms   = 10000;
   settings.rfid_disarm_time_ms     = 5000;
 
-  // New Defaults
+  // Gameplay Defaults
   settings.sudden_death_mode       = 0; 
   settings.dud_enabled             = 0; 
   settings.dud_chance              = 5; 
+  settings.easter_eggs_enabled     = 1; // Default On
+  settings.explosion_strobe_enabled= 1; // Default On
+
+  // Servo Defaults
+  settings.servo_enabled           = 1; 
+  settings.servo_start_angle       = 0;
+  settings.servo_end_angle         = 90;
   
   settings.num_rfid_uids           = 0;
   settings.wifi_enabled            = 1;

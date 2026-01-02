@@ -1,7 +1,7 @@
 // State.h
-// VERSION: 4.8.0
-// FIXED: Replaced myDFPlayer.play with safePlay()
-// FIXED: Dud Logic moves to State Entry (Pre-Sound)
+// VERSION: 4.9.0
+// FIXED: Servo Trigger Delay (Sync with Strobe)
+// FIXED: Easter Egg Enable Check
 
 #pragma once
 #include "Config.h"
@@ -35,7 +35,10 @@ enum PropState {
 enum ConfigState {
   MENU_MAIN, MENU_SET_BOMB_TIME, MENU_SET_MANUAL_TIME, MENU_SET_RFID_TIME,
   MENU_SUDDEN_DEATH_TOGGLE, MENU_DUD_SETTINGS, MENU_DUD_CHANCE,
-  MENU_VIEW_RFIDS, MENU_ADD_RFID, MENU_CLEAR_RFIDS_CONFIRM, MENU_NET_FORGET_CONFIRM, MENU_SAVE_EXIT,
+  MENU_EXTRAS_SUBMENU, 
+  MENU_TOGGLE_EASTER_EGGS, MENU_TOGGLE_STROBE,
+  MENU_SERVO_SETTINGS, MENU_SERVO_TOGGLE, MENU_SERVO_START_ANGLE, MENU_SERVO_END_ANGLE,
+  MENU_VIEW_RFIDS, MENU_ADD_RFID, MENU_CLEAR_RFIDS_CONFIRM, MENU_NET_FORGET_CONFIRM, MENU_SAVE_EXIT, MENU_EXIT_NO_SAVE,
   MENU_NETWORK, MENU_NET_ENABLE, MENU_NET_SERVER_MODE, MENU_NET_IP, MENU_NET_PORT, MENU_NET_MASTER_IP,
   MENU_NET_WIFI_SETUP, MENU_NET_SAVE_BACK, MENU_NETWORK_2, MENU_NET_APPLY_NOW
 };
@@ -181,7 +184,9 @@ inline void setState(PropState newState) {
          safePlay(SOUND_DETONATION_NEW);
       }
       
-      startShellEjectorSequence(); 
+      // NOTE: Servo is NO LONGER triggered here instantly.
+      // It is handled in the main loop() or Display::updateLeds() timing
+      // to sync with the strobe (approx 1s in).
     } break;
       
     case EXPLODED:

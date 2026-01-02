@@ -1,6 +1,6 @@
 /*
   PROJECT: Counter-Strike C4 Prop (Project 2)
-  VERSION: 3.4.0
+  VERSION: 3.5.0
   DATE: 2025-10-26
   AUTHOR: Andrew Florio
 
@@ -39,6 +39,9 @@ Bounce2::Button disarmButton = Bounce2::Button();
 Bounce2::Button armSwitch = Bounce2::Button();
 
 CRGB leds[NUM_LEDS]; 
+
+// SERVO DEFINITION (Must be here to handle the extern in ShellEjector.h)
+Servo myServo;
 
 Keypad keypad = Keypad(makeKeymap(KEYS), ROW_PINS, COL_PINS, KEYPAD_ROWS, KEYPAD_COLS);
 

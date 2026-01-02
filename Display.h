@@ -1,8 +1,7 @@
 // Display.h
-// VERSION: 4.7.0
-// FIXED: Flashing, Easter Egg Lighting Persistence
-// ADDED: PROP_DUD Display and LED logic
-// FIXED: Split Network Menu (Pages 1 & 2)
+// VERSION: 5.3.0
+// FIXED: Clean header definitions
+// FIXED: Strobe Delay (4500ms)
 
 #pragma once
 #include "State.h"
@@ -10,19 +9,26 @@
 #include "Utils.h"
 #include "ShellEjector.h"
 
+// --- Helper Functions ---
+
 inline void clearRow(int row) {
-  lcd.setCursor(0,row); lcd.print("                    ");
+  lcd.setCursor(0,row); 
+  lcd.print("                    ");
 }
+
 inline void centerPrint(const String& text, int row) {
   int textLength = text.length();
-  int padding = (20 - textLength) / 2; if (padding < 0) padding = 0;
+  int padding = (20 - textLength) / 2; 
+  if (padding < 0) padding = 0;
   clearRow(row);
   lcd.setCursor(padding, row);
   lcd.print(text);
 }
+
 inline void centerPrintC(const char* text, int row) {
   int textLength = strlen(text);
-  int padding = (20 - textLength) / 2; if (padding < 0) padding = 0;
+  int padding = (20 - textLength) / 2; 
+  if (padding < 0) padding = 0;
   clearRow(row);
   lcd.setCursor(padding, row);
   lcd.print(text);
@@ -30,6 +36,8 @@ inline void centerPrintC(const char* text, int row) {
 
 inline String boolToOnOff(uint8_t v){ return v?String("ON"):String("OFF"); }
 inline String modeToStr(uint8_t v){ return v?String("mDNS"):String("StaticIP"); }
+
+// --- Main Display Logic ---
 
 inline void updateDisplay() {
   if (currentState == CONFIG_MODE) {
@@ -45,9 +53,10 @@ inline void updateDisplay() {
         const char* items[] = {
           "Bomb Time", "Manual Disarm", "RFID Disarm",
           "Sudden Death", "Dud Settings", 
-          "RFID Tags", "Network", "Save & Exit"
+          "RFID Tags", "Settings & Servo", "Network",
+          "Save & Exit", "Exit (No Save)"
         };
-        const int TOTAL = 8; 
+        const int TOTAL = 10; 
 
         for (int i = -1; i <= 1; ++i) {
           int row = i + 2;
@@ -91,6 +100,54 @@ inline void updateDisplay() {
          char buffer[21]; snprintf(buffer, sizeof(buffer), "Val: %s", configInputBuffer);
          centerPrintC(buffer, 2);
          centerPrintC("(#=Save)", 3);
+      } break;
+
+      case MENU_EXTRAS_SUBMENU: {
+         centerPrintC("SETTINGS", 0);
+         clearRow(1); lcd.setCursor(0,1); lcd.print("1 Servo  2 EastEggs");
+         clearRow(2); lcd.setCursor(0,2); lcd.print("3 Strobe");
+         clearRow(3); lcd.setCursor(0,3); lcd.print("* Back");
+      } break;
+
+      case MENU_SERVO_SETTINGS: {
+        centerPrintC("SERVO CONFIG", 0);
+        clearRow(1); lcd.setCursor(0,1); lcd.print("1 Status: "); lcd.print(settings.servo_enabled ? "ON" : "OFF");
+        clearRow(2); lcd.setCursor(0,2); lcd.print("2 Start: "); lcd.print(settings.servo_start_angle);
+        clearRow(3); lcd.setCursor(0,3); lcd.print("3 End: "); lcd.print(settings.servo_end_angle);
+      } break;
+
+      case MENU_SERVO_TOGGLE: {
+        centerPrintC("Servo Enabled?", 0);
+        centerPrintC(settings.servo_enabled ? "Currently: ON" : "Currently: OFF", 1);
+        centerPrintC("(#=Toggle, *=Back)", 2);
+      } break;
+
+      case MENU_SERVO_START_ANGLE: {
+         centerPrintC("Set Start Angle", 0);
+         centerPrintC("(0-180)", 1);
+         char buffer[21]; snprintf(buffer, sizeof(buffer), "Val: %s", configInputBuffer);
+         centerPrintC(buffer, 2);
+         centerPrintC("(#=Save)", 3);
+      } break;
+
+      case MENU_SERVO_END_ANGLE: {
+         centerPrintC("Set End Angle", 0);
+         centerPrintC("(0-180)", 1);
+         char buffer[21]; snprintf(buffer, sizeof(buffer), "Val: %s", configInputBuffer);
+         centerPrintC(buffer, 2);
+         centerPrintC("(#=Save)", 3);
+      } break;
+
+      case MENU_TOGGLE_EASTER_EGGS: {
+        centerPrintC("Easter Eggs?", 0);
+        centerPrintC(settings.easter_eggs_enabled ? "Currently: ON" : "Currently: OFF", 1);
+        centerPrintC("(#=Toggle, *=Back)", 2);
+      } break;
+
+      case MENU_TOGGLE_STROBE: {
+        centerPrintC("Explosion Strobe?", 0);
+        centerPrintC(settings.explosion_strobe_enabled ? "Currently: ON" : "Currently: OFF", 1);
+        centerPrintC("(#=Toggle, *=Back)", 2);
       } break;
 
       case MENU_VIEW_RFIDS: {
@@ -170,6 +227,12 @@ inline void updateDisplay() {
         centerPrintC("Device will reboot.", 2);
       } break;
 
+      case MENU_EXIT_NO_SAVE: {
+        centerPrintC("Configuration", 0);
+        centerPrintC("DISCARDING...", 1);
+        centerPrintC("Device will reboot.", 2);
+      } break;
+
       case MENU_NET_FORGET_CONFIRM: {
         centerPrintC("FORGET WiFi CREDS?", 0);
         centerPrintC("This clears SSID/PWD", 1);
@@ -235,7 +298,7 @@ inline void updateDisplay() {
         default: break;
       }
     }
-    } else if (displayNeedsUpdate) {
+  } else if (displayNeedsUpdate) {
     displayNeedsUpdate = false;
     lcd.clear(); yield();
 
@@ -322,6 +385,8 @@ inline void updateDisplay() {
   }
 }
 
+// --- LED Logic ---
+
 inline void updateLeds() {
   // --- 1. STATUS LED (Index 0) ---
   switch (currentState) {
@@ -386,11 +451,17 @@ inline void updateLeds() {
     
     // B. EXPLOSION STROBE (Chaotic White Flash)
     else if (currentState == PRE_EXPLOSION) {
-       uint32_t elapsed = millis() - stateEntryTimestamp;
-       // Delayed Start: 4500ms (to sync with servo pop)
-       if (elapsed > 4500 && elapsed < 6500) {
-          bool flash = (millis() / 100) % 2; 
-          fill_solid(leds + 1, NUM_LEDS - 1, flash ? CRGB::White : CRGB::Black);
+       // Only run if enabled
+       if (settings.explosion_strobe_enabled) {
+          uint32_t elapsed = millis() - stateEntryTimestamp;
+          // Delayed Start: 4500ms
+          if (elapsed > 4500 && elapsed < 8500) {
+             // Much Faster Strobe (Every 50ms)
+             bool flash = (millis() / 40) % 2; 
+             fill_solid(leds + 1, NUM_LEDS - 1, flash ? CRGB::White : CRGB::Black);
+          } else {
+             fill_solid(leds + 1, NUM_LEDS - 1, CRGB::Black);
+          }
        } else {
           fill_solid(leds + 1, NUM_LEDS - 1, CRGB::Black);
        }
