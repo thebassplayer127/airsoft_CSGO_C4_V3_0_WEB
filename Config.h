@@ -66,9 +66,9 @@ static constexpr uint32_t RANDOM_DIGIT_UPDATE_MS  = 150;
 static constexpr uint32_t EASTER_EGG_CYCLE_MS     = 100;
 
 // Audio / Visual
-static constexpr int      BEEP_TONE_FREQ          = 2500;
-static constexpr uint32_t BEEP_TONE_DURATION_MS   = 125; // Fixed duration target
-static constexpr int      DFPLAYER_VOLUME         = 8;
+static constexpr int      BEEP_TONE_FREQ          = 2000;
+static constexpr uint32_t BEEP_TONE_DURATION_MS   = 225; // Fixed duration target
+static constexpr int      DFPLAYER_VOLUME         = 30;
 static constexpr int      NEOPIXEL_BRIGHTNESS     = 255;
 static constexpr size_t   CONFIG_INPUT_MAX        = 16;
 
@@ -78,8 +78,8 @@ inline void factoryResetSettings() {
   settings.magic_number            = SETTINGS_MAGIC;
   settings.version                 = SETTINGS_VERSION;
 
-  settings.bomb_duration_ms        = 45000;
-  settings.manual_disarm_time_ms   = 10000;
+  settings.bomb_duration_ms        = 120000;
+  settings.manual_disarm_time_ms   = 15000;
   settings.rfid_disarm_time_ms     = 5000;
 
   // Gameplay Defaults
