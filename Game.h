@@ -1,6 +1,6 @@
 // Game.h
-// VERSION: 5.8.0
-// FIXED: Explicitly stop audio on disarm abort (cuts off loop)
+// VERSION: 5.9.0
+// FIXED: Unsaved settings logic (Caches RAM duration before Special Mode override)
 // FIXED: RFID Reader Re-Init on Add Menu Entry
 
 #pragma once
@@ -20,6 +20,9 @@ bool terminatorModeActive = false;
 bool bondModeActive = false;
 bool suddenDeathActive = false;
 bool easterEggActive = false; 
+
+// Cache for unsaved RAM settings (so we don't revert to EEPROM after special modes)
+uint32_t stored_duration_ram = 0;
 
 inline bool parseIpFromBuffer(const char* buf, uint32_t& out) {
   int a,b,c,d;
@@ -88,7 +91,11 @@ inline void handleKeypadInput(char key) {
            return; 
         }
         strcpy(activeArmCode, MASTER_CODE); 
+        
+        // Cache current RAM duration before override
+        stored_duration_ram = settings.bomb_duration_ms;
         settings.bomb_duration_ms = 350000; 
+
         starWarsModeActive = true;
         bombArmedTimestamp = millis();
         safePlay(SOUND_STAR_WARS_THEME); 
@@ -171,7 +178,11 @@ inline void handleKeypadInput(char key) {
          c4OnEnterArmed(); setState(ARMED);
       } else if (ee && strcmp(enteredCode, "8675309") == 0) {
          strcpy(activeArmCode, enteredCode);
+         
+         // Cache current RAM duration before override
+         stored_duration_ram = settings.bomb_duration_ms;
          settings.bomb_duration_ms = 222000;
+
          bombArmedTimestamp = millis();
          safePlay(SOUND_JENNY); 
          c4OnEnterArmed(); setState(ARMED);
@@ -194,7 +205,11 @@ inline void handleKeypadInput(char key) {
       } else if (ee && strcmp(enteredCode, "007") == 0) {
          bondModeActive = true;
          strcpy(activeArmCode, enteredCode);
+
+         // Cache current RAM duration before override
+         stored_duration_ram = settings.bomb_duration_ms;
          settings.bomb_duration_ms = 105000;
+
          bombArmedTimestamp = millis();
          safePlay(SOUND_BOND_INTRO); 
          c4OnEnterArmed(); setState(ARMED);

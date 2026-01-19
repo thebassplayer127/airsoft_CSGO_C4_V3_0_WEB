@@ -1,5 +1,6 @@
 // State.h
-// VERSION: 5.2.0
+// VERSION: 5.3.0
+// FIXED: Unsaved settings bug (Special modes now restore to RAM value, not EEPROM)
 // FIXED: Terminator Explosion Chain (Track 33 -> 7 -> Exploded)
 // FIXED: Disarm Sound Loop Logic (Track 8 -> 47)
 // FIXED: Resume Background Music on Abort
@@ -23,6 +24,7 @@ extern bool suddenDeathActive;
 extern bool easterEggActive;
 
 extern bool servoTriggeredThisExplosion; 
+extern uint32_t stored_duration_ram; // New global to cache duration
 
 // Game states
 enum PropState { 
@@ -101,9 +103,12 @@ inline void resetSpecialModes() {
   suddenDeathActive = false;
   easterEggActive = false; 
   
-  Settings temp; 
-  EEPROM.get(0, temp);
-  settings.bomb_duration_ms = temp.bomb_duration_ms;
+  // FIX: Restore from RAM cache if it exists, otherwise leave alone.
+  // (Old method read from EEPROM, which lost unsaved menu changes)
+  if (stored_duration_ram > 0) {
+      settings.bomb_duration_ms = stored_duration_ram;
+      stored_duration_ram = 0; // Reset cache
+  }
 }
 
 inline void setState(PropState newState) {
