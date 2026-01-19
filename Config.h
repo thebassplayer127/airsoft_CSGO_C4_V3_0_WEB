@@ -1,19 +1,20 @@
 // Config.h
-// VERSION: 3.5.0
-// ADDED: Servo Settings, Strobe Toggle, Easter Egg Toggle
+// VERSION: 4.0.0
+// ADDED: Sound Toggle, Volume Control, Plant Sensor Toggle
+// CHANGED: Defaults (WiFi OFF, Servo OFF, Sensor OFF)
 
 #pragma once
 #include <Arduino.h>
 #include <EEPROM.h>
 
 // Version
-static const char* FW_VERSION = "3.5.0";
+static const char* FW_VERSION = "4.0.0";
 
 // EEPROM / Settings
 #define EEPROM_SIZE 512
 #define MAX_RFID_UIDS 10
-#define SETTINGS_MAGIC    0xC4C40201 // Magic changed for struct update
-#define SETTINGS_VERSION  4          // Version bumped
+#define SETTINGS_MAGIC    0xC4C40205 // Magic changed for struct update
+#define SETTINGS_VERSION  5          // Version bumped
 
 struct Settings {
   uint32_t magic_number;
@@ -25,15 +26,22 @@ struct Settings {
   uint32_t manual_disarm_time_ms;
   uint32_t rfid_disarm_time_ms;
 
-  // --- NEW MODES ---
+  // --- MODES ---
   uint8_t  sudden_death_mode;  // 0=Off, 1=On
   uint8_t  dud_enabled;        // 0=Off, 1=On
   uint8_t  dud_chance;         // 1-100%
   
-  // --- NEW FEATURES V3.5 ---
+  // --- HARDWARE ---
   uint8_t  servo_enabled;           // 0=Off, 1=On
   uint8_t  servo_start_angle;       // e.g., 0
   uint8_t  servo_end_angle;         // e.g., 90
+  
+  // --- AUDIO ---
+  uint8_t  sound_enabled;           // 0=Off, 1=On (NEW)
+  uint8_t  sound_volume;            // 0-30 (NEW)
+  
+  // --- SENSORS & EXTRAS ---
+  uint8_t  plant_sensor_enabled;    // 0=Off, 1=On (NEW)
   uint8_t  easter_eggs_enabled;     // 0=Off, 1=On
   uint8_t  explosion_strobe_enabled;// 0=Off, 1=On
 
@@ -67,8 +75,7 @@ static constexpr uint32_t EASTER_EGG_CYCLE_MS     = 100;
 
 // Audio / Visual
 static constexpr int      BEEP_TONE_FREQ          = 2000;
-static constexpr uint32_t BEEP_TONE_DURATION_MS   = 225; // Fixed duration target
-static constexpr int      DFPLAYER_VOLUME         = 30;
+static constexpr uint32_t BEEP_TONE_DURATION_MS   = 225;
 static constexpr int      NEOPIXEL_BRIGHTNESS     = 255;
 static constexpr size_t   CONFIG_INPUT_MAX        = 16;
 
@@ -86,16 +93,24 @@ inline void factoryResetSettings() {
   settings.sudden_death_mode       = 0; 
   settings.dud_enabled             = 0; 
   settings.dud_chance              = 5; 
-  settings.easter_eggs_enabled     = 1; // Default On
-  settings.explosion_strobe_enabled= 1; // Default On
+  
+  // Audio Defaults (User Request: Sound ON, Volume Default 20)
+  settings.sound_enabled           = 1;
+  settings.sound_volume            = 20;
 
-  // Servo Defaults
-  settings.servo_enabled           = 1; 
+  // Hardware Defaults (User Request: Servo OFF, Plant Sensor OFF)
+  settings.servo_enabled           = 0; 
   settings.servo_start_angle       = 0;
   settings.servo_end_angle         = 90;
+  settings.plant_sensor_enabled    = 0;
+
+  // Extras
+  settings.easter_eggs_enabled     = 1; // Default On
+  settings.explosion_strobe_enabled= 1; // Default On
   
+  // Network Defaults (User Request: WiFi OFF)
   settings.num_rfid_uids           = 0;
-  settings.wifi_enabled            = 1;
+  settings.wifi_enabled            = 0; 
   settings.net_use_mdns            = 1;
   settings.scoreboard_ip           = (192u<<24) | (168u<<16) | (0u<<8) | 100u;
   settings.master_ip               = (192u<<24) | (168u<<16) | (0u<<8) |  50u;

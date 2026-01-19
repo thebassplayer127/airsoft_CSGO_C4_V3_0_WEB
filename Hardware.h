@@ -1,7 +1,6 @@
 // Hardware.h
-// VERSION: 2.2.0
-// FIXED: Buzzer Whine (Detach Pin)
-// ADDED: safePlay() to prevent DFPlayer Lockups
+// VERSION: 3.0.0
+// ADDED: Volume control and Sound Toggle support
 
 #pragma once
 #include <Wire.h>
@@ -19,7 +18,7 @@
 // --- LED CONFIGURATION ---
 // Index 0 = Status LED (Blinking)
 // Index 1..N = Exterior Strip
-#define NUM_LEDS 60 // Set this to your max count (e.g., 60, 100)
+#define NUM_LEDS 60 
 
 // Externals defined in .ino
 extern hd44780_I2Cexp lcd;
@@ -32,13 +31,13 @@ extern Keypad keypad;
 
 // Audio Cooldown Vars
 static uint32_t lastAudioCmdTime = 0;
-static const uint32_t AUDIO_COOLDOWN_MS = 100; // Minimum time between serial commands
+static const uint32_t AUDIO_COOLDOWN_MS = 100; 
 
 inline void initHardware() {
   // FastLED
-  FastLED.addLeds<NEOPIXEL, NEOPIXEL_PIN>(leds, NUM_LEDS); // Use NUM_LEDS
+  FastLED.addLeds<NEOPIXEL, NEOPIXEL_PIN>(leds, NUM_LEDS); 
   FastLED.setBrightness(NEOPIXEL_BRIGHTNESS);
-  fill_solid(leds, NUM_LEDS, CRGB::Black); // Clear all
+  fill_solid(leds, NUM_LEDS, CRGB::Black); 
   FastLED.show();
 
   // LCD
@@ -50,10 +49,10 @@ inline void initHardware() {
   SPI.begin(RFID_SCK_PIN, RFID_MISO_PIN, RFID_MOSI_PIN, RFID_SDA_PIN);
   rfid.PCD_Init();
 
-  // DFPlayer on Serial0 per wiring
+  // DFPlayer
   Serial0.begin(9600);
   myDFPlayer.begin(Serial0, true, true);
-  myDFPlayer.volume(DFPLAYER_VOLUME);
+  myDFPlayer.volume(settings.sound_volume); // Apply saved volume
 
   // Inputs
   disarmButton.attach(DISARM_BUTTON_PIN, INPUT_PULLUP);
@@ -62,18 +61,17 @@ inline void initHardware() {
   armSwitch.interval(25);
   armSwitch.update();
 
-  // Buzzer Setup handled in beepStart/Stop dynamically to prevent whine
+  // Buzzer Setup handled in beepStart/Stop dynamically
 }
 
 // --- AUDIO SAFE WRAPPER ---
-// Prevents DFPlayer lockups by rate-limiting commands
+// Prevents DFPlayer lockups and respects "Sound Enabled" setting
 inline void safePlay(int track) {
+  if (!settings.sound_enabled) return; // Mute check
+
   if (millis() - lastAudioCmdTime > AUDIO_COOLDOWN_MS) {
     myDFPlayer.play(track);
     lastAudioCmdTime = millis();
-  } else {
-    // Optional: Log dropped sound or simple ignore
-    // Serial.println("[AUDIO] Skipped track (too fast)");
   }
 }
 

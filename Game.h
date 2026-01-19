@@ -1,7 +1,7 @@
 // Game.h
-// VERSION: 5.9.0
-// FIXED: Unsaved settings logic (Caches RAM duration before Special Mode override)
-// FIXED: RFID Reader Re-Init on Add Menu Entry
+// VERSION: 6.0.1
+// FIXED: Enum name consistency (MENU_HARDWARE_SUBMENU / MENU_EXTRAS_SUBMENU)
+// UPDATED: Corrected logic for FX Submenu transition
 
 #pragma once
 #include <Arduino.h>
@@ -380,7 +380,7 @@ inline void handleConfigMode(char key) {
             case 3: currentConfigState = MENU_SUDDEN_DEATH_TOGGLE; break;
             case 4: currentConfigState = MENU_DUD_SETTINGS; break;
             case 5: rfidViewIndex = 0; currentConfigState = MENU_VIEW_RFIDS; break;
-            case 6: currentConfigState = MENU_EXTRAS_SUBMENU; break;
+            case 6: currentConfigState = MENU_HARDWARE_SUBMENU; break; 
             case 7: currentConfigState = MENU_NETWORK; break;
             case 8: {
               Serial.println("[CFG] Save Exit");
@@ -452,12 +452,54 @@ inline void handleConfigMode(char key) {
         if (key == '*') currentConfigState = MENU_DUD_SETTINGS; 
       } break;
 
-      // --- EXTRAS SUBMENU ---
-      case MENU_EXTRAS_SUBMENU: {
-        if (key == '1') currentConfigState = MENU_SERVO_SETTINGS;
-        if (key == '2') currentConfigState = MENU_TOGGLE_EASTER_EGGS;
-        if (key == '3') currentConfigState = MENU_TOGGLE_STROBE;
+      // --- HARDWARE / AUDIO SUBMENU ---
+      case MENU_HARDWARE_SUBMENU: {
+        if (key == '1') currentConfigState = MENU_AUDIO_SUBMENU;
+        if (key == '2') currentConfigState = MENU_SERVO_SETTINGS;
+        if (key == '3') currentConfigState = MENU_PLANT_SENSOR_TOGGLE;
+        if (key == '4') currentConfigState = MENU_EXTRAS_SUBMENU; // FX
         if (key == '*') currentConfigState = MENU_MAIN;
+      } break;
+
+      // --- AUDIO SUBMENU ---
+      case MENU_AUDIO_SUBMENU: {
+         if (key == '1') currentConfigState = MENU_AUDIO_TOGGLE;
+         if (key == '2') { configInputBuffer[0]='\0'; currentConfigState = MENU_VOLUME; }
+         if (key == '*') currentConfigState = MENU_HARDWARE_SUBMENU;
+      } break;
+
+      case MENU_AUDIO_TOGGLE: {
+         if (key == '#') { settings.sound_enabled = !settings.sound_enabled; safePlay(SOUND_MENU_CONFIRM); }
+         if (key == '*') currentConfigState = MENU_AUDIO_SUBMENU;
+      } break;
+
+      case MENU_VOLUME: {
+         if (isdigit(key)) {
+            size_t len = strlen(configInputBuffer);
+            if (len + 1 < CONFIG_INPUT_MAX) { configInputBuffer[len] = key; configInputBuffer[len+1] = '\0'; }
+         }
+         if (key == '#') {
+            int val = atoi(configInputBuffer);
+            if (val >= 0 && val <= 30) { 
+                settings.sound_volume = val; 
+                myDFPlayer.volume(val); // Apply immediately
+                safePlay(SOUND_MENU_CONFIRM); 
+            }
+            currentConfigState = MENU_AUDIO_SUBMENU;
+         }
+         if (key == '*') currentConfigState = MENU_AUDIO_SUBMENU;
+      } break;
+
+      case MENU_PLANT_SENSOR_TOGGLE: {
+         if (key == '#') { settings.plant_sensor_enabled = !settings.plant_sensor_enabled; safePlay(SOUND_MENU_CONFIRM); }
+         if (key == '*') currentConfigState = MENU_HARDWARE_SUBMENU;
+      } break;
+
+      // --- EXTRAS (FX) SUBMENU ---
+      case MENU_EXTRAS_SUBMENU: {
+        if (key == '1') currentConfigState = MENU_TOGGLE_STROBE;
+        if (key == '2') currentConfigState = MENU_TOGGLE_EASTER_EGGS;
+        if (key == '*') currentConfigState = MENU_HARDWARE_SUBMENU;
       } break;
 
       // --- SERVO SETTINGS ---
@@ -465,7 +507,7 @@ inline void handleConfigMode(char key) {
         if (key == '1') currentConfigState = MENU_SERVO_TOGGLE;
         if (key == '2') { configInputBuffer[0]='\0'; currentConfigState = MENU_SERVO_START_ANGLE; }
         if (key == '3') { configInputBuffer[0]='\0'; currentConfigState = MENU_SERVO_END_ANGLE; }
-        if (key == '*') currentConfigState = MENU_EXTRAS_SUBMENU;
+        if (key == '*') currentConfigState = MENU_HARDWARE_SUBMENU;
       } break;
 
       case MENU_SERVO_TOGGLE: {

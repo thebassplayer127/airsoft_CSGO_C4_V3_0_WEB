@@ -1,7 +1,7 @@
 // Display.h
-// VERSION: 5.5.0
-// OPTIMIZED: Throttled display updates (50ms) to fix sluggish keypad
-// FIXED: Updated Exit Menu Text
+// VERSION: 6.0.1
+// FIXED: Enum name consistency
+// FIXED: updateLeds scope issue
 
 #pragma once
 #include "State.h"
@@ -57,7 +57,7 @@ inline void updateDisplay() {
         const char* items[] = {
           "Bomb Time", "Manual Disarm", "RFID Disarm",
           "Sudden Death", "Dud Settings", 
-          "RFID Tags", "Settings & Servo", "Network",
+          "RFID Tags", "Hardware & Audio", "Network",
           "Save & Exit", "Exit" 
         };
         const int TOTAL = 10; 
@@ -106,10 +106,46 @@ inline void updateDisplay() {
          centerPrintC("(#=Save)", 3);
       } break;
 
-      case MENU_EXTRAS_SUBMENU: {
-         centerPrintC("SETTINGS", 0);
-         clearRow(1); lcd.setCursor(0,1); lcd.print("1 Servo  2 EastEggs");
-         clearRow(2); lcd.setCursor(0,2); lcd.print("3 Strobe");
+      // --- HARDWARE / AUDIO SUBMENU ---
+      case MENU_HARDWARE_SUBMENU: {
+         centerPrintC("HARDWARE CONFIG", 0);
+         clearRow(1); lcd.setCursor(0,1); lcd.print("1 Audio  2 Servo");
+         clearRow(2); lcd.setCursor(0,2); lcd.print("3 Sensor 4 FX/Xtras");
+         clearRow(3); lcd.setCursor(0,3); lcd.print("* Back");
+      } break;
+
+      case MENU_AUDIO_SUBMENU: {
+         centerPrintC("AUDIO CONFIG", 0);
+         clearRow(1); lcd.setCursor(0,1); lcd.print("1 Sound: "); lcd.print(settings.sound_enabled ? "ON" : "OFF");
+         clearRow(2); lcd.setCursor(0,2); lcd.print("2 Volume: "); lcd.print(settings.sound_volume);
+         clearRow(3); lcd.setCursor(0,3); lcd.print("* Back");
+      } break;
+
+      case MENU_AUDIO_TOGGLE: {
+        centerPrintC("Sound Enabled?", 0);
+        centerPrintC(settings.sound_enabled ? "Currently: ON" : "Currently: OFF", 1);
+        centerPrintC("(#=Toggle, *=Back)", 2);
+      } break;
+
+      case MENU_VOLUME: {
+         centerPrintC("Set Volume", 0);
+         centerPrintC("(0-30)", 1);
+         char buffer[21]; snprintf(buffer, sizeof(buffer), "Val: %s", configInputBuffer);
+         centerPrintC(buffer, 2);
+         centerPrintC("(#=Save)", 3);
+      } break;
+
+      case MENU_PLANT_SENSOR_TOGGLE: {
+        centerPrintC("Plant Sensor Enable", 0);
+        centerPrintC(settings.plant_sensor_enabled ? "Currently: ON" : "Currently: OFF", 1);
+        centerPrintC("(#=Toggle, *=Back)", 2);
+      } break;
+
+      // --- EFFECTS (Easter Eggs / Strobe) ---
+      case MENU_EXTRAS_SUBMENU: { 
+         centerPrintC("EFFECTS", 0);
+         clearRow(1); lcd.setCursor(0,1); lcd.print("1 Strobe: "); lcd.print(settings.explosion_strobe_enabled ? "ON" : "OFF");
+         clearRow(2); lcd.setCursor(0,2); lcd.print("2 Eggs: "); lcd.print(settings.easter_eggs_enabled ? "ON" : "OFF");
          clearRow(3); lcd.setCursor(0,3); lcd.print("* Back");
       } break;
 
@@ -250,10 +286,6 @@ inline void updateDisplay() {
 
   // ---------- Normal Gameplay Overlay ----------
   if (currentState >= ARMED && currentState < DISARMED) {
-    
-    // OPTIMIZATION: Only update the timer every 50ms (20fps).
-    // Updating every loop (1ms) chokes the keypad.
-    // However, if we are entering a new mode (displayNeedsUpdate), force it.
     if (!displayNeedsUpdate && (now - lastDisplayUpdate < 50)) {
         return; 
     }
@@ -402,6 +434,7 @@ inline void updateDisplay() {
 }
 
 // --- LED Logic ---
+// MOVED inside header to be available to main sketch
 
 inline void updateLeds() {
   // --- 1. STATUS LED (Index 0) ---

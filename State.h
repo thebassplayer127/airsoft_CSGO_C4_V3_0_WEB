@@ -1,9 +1,6 @@
 // State.h
-// VERSION: 5.3.0
-// FIXED: Unsaved settings bug (Special modes now restore to RAM value, not EEPROM)
-// FIXED: Terminator Explosion Chain (Track 33 -> 7 -> Exploded)
-// FIXED: Disarm Sound Loop Logic (Track 8 -> 47)
-// FIXED: Resume Background Music on Abort
+// VERSION: 6.0.1
+// FIXED: Enum name consistency (MENU_HARDWARE_SUBMENU)
 
 #pragma once
 #include "Config.h"
@@ -24,7 +21,7 @@ extern bool suddenDeathActive;
 extern bool easterEggActive;
 
 extern bool servoTriggeredThisExplosion; 
-extern uint32_t stored_duration_ram; // New global to cache duration
+extern uint32_t stored_duration_ram;
 
 // Game states
 enum PropState { 
@@ -38,12 +35,29 @@ enum PropState {
 
 // Config/menu states
 enum ConfigState {
-  MENU_MAIN, MENU_SET_BOMB_TIME, MENU_SET_MANUAL_TIME, MENU_SET_RFID_TIME,
+  MENU_MAIN, 
+  MENU_SET_BOMB_TIME, MENU_SET_MANUAL_TIME, MENU_SET_RFID_TIME,
   MENU_SUDDEN_DEATH_TOGGLE, MENU_DUD_SETTINGS, MENU_DUD_CHANCE,
-  MENU_EXTRAS_SUBMENU, 
+  
+  // Renamed from EXTRAS to HARDWARE to avoid confusion
+  MENU_HARDWARE_SUBMENU, 
+  
+  // Audio Submenu
+  MENU_AUDIO_SUBMENU, MENU_AUDIO_TOGGLE, MENU_VOLUME,
+
+  // Hardware/FX
+  MENU_PLANT_SENSOR_TOGGLE,
+  
+  // FX Submenu (Strobe/Eggs)
+  MENU_EXTRAS_SUBMENU, // Kept this name for the "FX/Xtras" screen logic 
   MENU_TOGGLE_EASTER_EGGS, MENU_TOGGLE_STROBE,
+  
+  // Servo
   MENU_SERVO_SETTINGS, MENU_SERVO_TOGGLE, MENU_SERVO_START_ANGLE, MENU_SERVO_END_ANGLE,
-  MENU_VIEW_RFIDS, MENU_ADD_RFID, MENU_CLEAR_RFIDS_CONFIRM, MENU_NET_FORGET_CONFIRM, MENU_SAVE_EXIT, MENU_EXIT_NO_SAVE,
+
+  // RFID & Network
+  MENU_VIEW_RFIDS, MENU_ADD_RFID, MENU_CLEAR_RFIDS_CONFIRM, 
+  MENU_NET_FORGET_CONFIRM, MENU_SAVE_EXIT, MENU_EXIT_NO_SAVE,
   MENU_NETWORK, MENU_NET_ENABLE, MENU_NET_SERVER_MODE, MENU_NET_IP, MENU_NET_PORT, MENU_NET_MASTER_IP,
   MENU_NET_WIFI_SETUP, MENU_NET_SAVE_BACK, MENU_NETWORK_2, MENU_NET_APPLY_NOW
 };
@@ -103,11 +117,9 @@ inline void resetSpecialModes() {
   suddenDeathActive = false;
   easterEggActive = false; 
   
-  // FIX: Restore from RAM cache if it exists, otherwise leave alone.
-  // (Old method read from EEPROM, which lost unsaved menu changes)
   if (stored_duration_ram > 0) {
       settings.bomb_duration_ms = stored_duration_ram;
-      stored_duration_ram = 0; // Reset cache
+      stored_duration_ram = 0; 
   }
 }
 
@@ -169,7 +181,6 @@ inline void setState(PropState newState) {
     case DISARMING_MANUAL:
     case DISARMING_RFID:
       disarmStartTimestamp = millis();
-      // Start the "Begin" sound. The loop (47) is handled in printDetail when this finishes.
       safePlay(SOUND_DISARM_BEGIN); 
       break;
 
@@ -201,7 +212,6 @@ inline void setState(PropState newState) {
       doomModeActive = false; 
       
       if (terminatorModeActive) {
-         // Terminator: Play quote first. Explosion chained in printDetail
          safePlay(SOUND_ILL_BE_BACK); 
       }
       else {
@@ -236,8 +246,6 @@ inline void setState(PropState newState) {
 
 inline void printDetail(uint8_t type, int value) {
   if (type == DFPlayerPlayFinished) {
-    Serial.printf("Track %d Finished!\n", value);
-    
     if (currentState == EXPLODED) return;
 
     if (doomModeActive && value == SOUND_DOOM_SLAYER) {
@@ -248,9 +256,7 @@ inline void printDetail(uint8_t type, int value) {
       safePlay(SOUND_BOND_THEME);
     }
 
-    // --- FIX: Disarm Sound Loop ---
     if (value == SOUND_DISARM_BEGIN) {
-       // If we are still in a disarming state, start the loop track
        if (currentState == DISARMING_MANUAL || currentState == DISARMING_RFID) {
            safePlay(SOUND_DISARM_LOOP);
        }
@@ -263,10 +269,7 @@ inline void printDetail(uint8_t type, int value) {
       return; 
     }
 
-    // --- FIX: Terminator Explosion Chain ---
     if (value == SOUND_ILL_BE_BACK) {
-        // Terminator quote finished, NOW play the explosion
-        // When explosion finishes (logic above), it will set EXPLODED state
         safePlay(SOUND_DETONATION_NEW);
         nextTrackToPlay = 0;
         return;
