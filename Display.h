@@ -1,7 +1,7 @@
 // Display.h
-// VERSION: 6.0.1
-// FIXED: Enum name consistency
-// FIXED: updateLeds scope issue
+// VERSION: 6.0.2
+// FIXED: Added prompts to Volume/Servo/Dud menus to explain controls
+// FIXED: Condensed Servo Settings menu to prevent blank navigation
 
 #pragma once
 #include "State.h"
@@ -103,7 +103,7 @@ inline void updateDisplay() {
          centerPrintC("(1-100)", 1);
          char buffer[21]; snprintf(buffer, sizeof(buffer), "Val: %s", configInputBuffer);
          centerPrintC(buffer, 2);
-         centerPrintC("(#=Save)", 3);
+         centerPrintC("(#=Save *=Back)", 3); // FIX: Added * prompt
       } break;
 
       // --- HARDWARE / AUDIO SUBMENU ---
@@ -132,7 +132,7 @@ inline void updateDisplay() {
          centerPrintC("(0-30)", 1);
          char buffer[21]; snprintf(buffer, sizeof(buffer), "Val: %s", configInputBuffer);
          centerPrintC(buffer, 2);
-         centerPrintC("(#=Save)", 3);
+         centerPrintC("(#=Save *=Back)", 3); // FIX: Added * prompt
       } break;
 
       case MENU_PLANT_SENSOR_TOGGLE: {
@@ -151,9 +151,11 @@ inline void updateDisplay() {
 
       case MENU_SERVO_SETTINGS: {
         centerPrintC("SERVO CONFIG", 0);
-        clearRow(1); lcd.setCursor(0,1); lcd.print("1 Status: "); lcd.print(settings.servo_enabled ? "ON" : "OFF");
-        clearRow(2); lcd.setCursor(0,2); lcd.print("2 Start: "); lcd.print(settings.servo_start_angle);
-        clearRow(3); lcd.setCursor(0,3); lcd.print("3 End: "); lcd.print(settings.servo_end_angle);
+        // FIX: Condensed layout to fit * Back
+        clearRow(1); lcd.setCursor(0,1); lcd.print("1 Svo:"); lcd.print(settings.servo_enabled ? "ON" : "OFF");
+        clearRow(2); lcd.setCursor(0,2); lcd.print("2 Str:"); lcd.print(settings.servo_start_angle);
+        lcd.print(" 3 End:"); lcd.print(settings.servo_end_angle);
+        clearRow(3); lcd.setCursor(0,3); lcd.print("* Back");
       } break;
 
       case MENU_SERVO_TOGGLE: {
@@ -167,7 +169,7 @@ inline void updateDisplay() {
          centerPrintC("(0-180)", 1);
          char buffer[21]; snprintf(buffer, sizeof(buffer), "Val: %s", configInputBuffer);
          centerPrintC(buffer, 2);
-         centerPrintC("(#=Save)", 3);
+         centerPrintC("(#=Save *=Back)", 3); // FIX: Added * prompt
       } break;
 
       case MENU_SERVO_END_ANGLE: {
@@ -175,7 +177,7 @@ inline void updateDisplay() {
          centerPrintC("(0-180)", 1);
          char buffer[21]; snprintf(buffer, sizeof(buffer), "Val: %s", configInputBuffer);
          centerPrintC(buffer, 2);
-         centerPrintC("(#=Save)", 3);
+         centerPrintC("(#=Save *=Back)", 3); // FIX: Added * prompt
       } break;
 
       case MENU_TOGGLE_EASTER_EGGS: {

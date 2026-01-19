@@ -1,7 +1,8 @@
 // Game.h
-// VERSION: 6.0.1
-// FIXED: Enum name consistency (MENU_HARDWARE_SUBMENU / MENU_EXTRAS_SUBMENU)
-// UPDATED: Corrected logic for FX Submenu transition
+// VERSION: 6.0.3
+// FIXED: Added delay after setting volume to prevent DFPlayer serial lockup
+// FIXED: Added Backspace logic to Volume/Dud/Servo inputs
+// FIXED: Added Cancel sound for invalid inputs in submenus
 
 #pragma once
 #include <Arduino.h>
@@ -444,12 +445,22 @@ inline void handleConfigMode(char key) {
           size_t len = strlen(configInputBuffer);
           if (len + 1 < CONFIG_INPUT_MAX) { configInputBuffer[len] = key; configInputBuffer[len+1] = '\0'; }
         }
+        // FIX: Added Backspace Logic
+        if (key == '*') {
+            size_t len = strlen(configInputBuffer);
+            if (len > 0) configInputBuffer[len-1] = '\0';
+            else currentConfigState = MENU_DUD_SETTINGS;
+        }
         if (key == '#') {
           int val = atoi(configInputBuffer);
-          if (val >= 0 && val <= 100) { settings.dud_chance = val; safePlay(SOUND_MENU_CONFIRM); }
+          if (val >= 0 && val <= 100) { 
+            settings.dud_chance = val; 
+            safePlay(SOUND_MENU_CONFIRM); 
+          } else {
+            safePlay(SOUND_MENU_CANCEL);
+          }
           currentConfigState = MENU_DUD_SETTINGS;
         }
-        if (key == '*') currentConfigState = MENU_DUD_SETTINGS; 
       } break;
 
       // --- HARDWARE / AUDIO SUBMENU ---
@@ -478,16 +489,25 @@ inline void handleConfigMode(char key) {
             size_t len = strlen(configInputBuffer);
             if (len + 1 < CONFIG_INPUT_MAX) { configInputBuffer[len] = key; configInputBuffer[len+1] = '\0'; }
          }
+         // FIX: Added Backspace Logic
+         if (key == '*') {
+            size_t len = strlen(configInputBuffer);
+            if (len > 0) configInputBuffer[len-1] = '\0';
+            else currentConfigState = MENU_AUDIO_SUBMENU;
+         }
          if (key == '#') {
             int val = atoi(configInputBuffer);
             if (val >= 0 && val <= 30) { 
                 settings.sound_volume = val; 
+                delay(500);
                 myDFPlayer.volume(val); // Apply immediately
+                delay(500); // FIX: Wait for DFPlayer to process volume command before sending next audio
                 safePlay(SOUND_MENU_CONFIRM); 
+            } else {
+                safePlay(SOUND_MENU_CANCEL); // Notify invalid
             }
             currentConfigState = MENU_AUDIO_SUBMENU;
          }
-         if (key == '*') currentConfigState = MENU_AUDIO_SUBMENU;
       } break;
 
       case MENU_PLANT_SENSOR_TOGGLE: {
@@ -520,12 +540,22 @@ inline void handleConfigMode(char key) {
             size_t len = strlen(configInputBuffer);
             if (len + 1 < CONFIG_INPUT_MAX) { configInputBuffer[len] = key; configInputBuffer[len+1] = '\0'; }
         }
+        // FIX: Added Backspace Logic
+        if (key == '*') {
+            size_t len = strlen(configInputBuffer);
+            if (len > 0) configInputBuffer[len-1] = '\0';
+            else currentConfigState = MENU_SERVO_SETTINGS;
+        }
         if (key == '#') {
             int val = atoi(configInputBuffer);
-            if (val >= 0 && val <= 180) { settings.servo_start_angle = val; safePlay(SOUND_MENU_CONFIRM); }
+            if (val >= 0 && val <= 180) { 
+              settings.servo_start_angle = val; 
+              safePlay(SOUND_MENU_CONFIRM); 
+            } else {
+              safePlay(SOUND_MENU_CANCEL);
+            }
             currentConfigState = MENU_SERVO_SETTINGS;
         }
-        if (key == '*') currentConfigState = MENU_SERVO_SETTINGS;
       } break;
 
       case MENU_SERVO_END_ANGLE: {
@@ -533,12 +563,22 @@ inline void handleConfigMode(char key) {
             size_t len = strlen(configInputBuffer);
             if (len + 1 < CONFIG_INPUT_MAX) { configInputBuffer[len] = key; configInputBuffer[len+1] = '\0'; }
         }
+        // FIX: Added Backspace Logic
+        if (key == '*') {
+            size_t len = strlen(configInputBuffer);
+            if (len > 0) configInputBuffer[len-1] = '\0';
+            else currentConfigState = MENU_SERVO_SETTINGS;
+        }
         if (key == '#') {
             int val = atoi(configInputBuffer);
-            if (val >= 0 && val <= 180) { settings.servo_end_angle = val; safePlay(SOUND_MENU_CONFIRM); }
+            if (val >= 0 && val <= 180) { 
+              settings.servo_end_angle = val; 
+              safePlay(SOUND_MENU_CONFIRM); 
+            } else {
+              safePlay(SOUND_MENU_CANCEL);
+            }
             currentConfigState = MENU_SERVO_SETTINGS;
         }
-        if (key == '*') currentConfigState = MENU_SERVO_SETTINGS;
       } break;
 
       case MENU_TOGGLE_EASTER_EGGS: {
