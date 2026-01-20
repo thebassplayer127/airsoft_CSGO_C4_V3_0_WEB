@@ -1,5 +1,5 @@
 // Config.h
-// VERSION: 4.0.0
+// VERSION: 4.0.1
 // ADDED: Sound Toggle, Volume Control, Plant Sensor Toggle
 // CHANGED: Defaults (WiFi OFF, Servo OFF, Sensor OFF)
 
@@ -8,7 +8,7 @@
 #include <EEPROM.h>
 
 // Version
-static const char* FW_VERSION = "4.0.0";
+static const char* FW_VERSION = "4.0.1";
 
 // EEPROM / Settings
 #define EEPROM_SIZE 512

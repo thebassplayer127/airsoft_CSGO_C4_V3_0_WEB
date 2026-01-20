@@ -1,5 +1,6 @@
 // Network.h
-// VERSION: 2.2.0   // consolidated: numeric-IP dialing, WS watchdog, mDNS-once, gameplay gating, cooldown
+// VERSION: 2.3.0
+// ADDED: ArduinoOTA support (setupOTA/handleOTA)
 
 #pragma once
 #include <Arduino.h>
@@ -7,6 +8,7 @@
 #include <ESPmDNS.h>
 #include <WebSocketsClient.h>
 #include <WiFiManager.h>
+#include <ArduinoOTA.h>  // FIX: Added for firmware updates
 #include "Config.h"
 #include "State.h"
 #include "Utils.h"
@@ -166,6 +168,44 @@ inline bool resolveScoreboardIP();
 inline void forgetWifiCredentials();
 inline void beginNetwork(bool disableForThisBoot);
 inline void networkLoop();
+inline void setupOTA(); 
+
+// -----------------------------------------------------------------------------
+// OTA Setup (FIX: Added Function)
+// -----------------------------------------------------------------------------
+inline void setupOTA() {
+  ArduinoOTA.setHostname("c4prop");
+  // ArduinoOTA.setPassword("admin"); // Optional: set if needed
+
+  ArduinoOTA.onStart([]() {
+    String type = (ArduinoOTA.getCommand() == U_FLASH) ? "sketch" : "filesystem";
+    Serial.println("[OTA] Start updating " + type);
+  });
+  ArduinoOTA.onEnd([]() {
+    Serial.println("\n[OTA] End");
+  });
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    // throttle progress logs
+    static unsigned int lastP = 0;
+    unsigned int p = (progress / (total / 100));
+    if (p != lastP && p % 10 == 0) {
+      Serial.printf("[OTA] Progress: %u%%\n", p);
+      lastP = p;
+    }
+  });
+  ArduinoOTA.onError([](ota_error_t error) {
+    Serial.printf("[OTA] Error[%u]: ", error);
+    if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+    else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+    else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+    else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+    else if (error == OTA_END_ERROR) Serial.println("End Failed");
+  });
+
+  ArduinoOTA.begin();
+  Serial.println("[OTA] Service Ready (Hostname: c4prop)");
+}
+
 
 // -----------------------------------------------------------------------------
 // WebSocket helpers (connect via resolved IP if we have one)
@@ -466,6 +506,16 @@ inline void networkLoop() {
 
   // Keep portal responsive if it's active
   networkPortalLoop();
+
+  // FIX: Initialize OTA once if we have WiFi
+  static bool otaInitialized = false;
+  if (WiFi.isConnected() && !otaInitialized) {
+      setupOTA();
+      otaInitialized = true;
+  }
+  if (otaInitialized) {
+      ArduinoOTA.handle(); 
+  }
 
   // If we just saved creds via WiFiManager, attempt a STA connect once
   if (g_portalConnectedThisSession) {

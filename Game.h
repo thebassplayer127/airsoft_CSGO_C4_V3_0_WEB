@@ -1,8 +1,8 @@
 // Game.h
-// VERSION: 6.0.3
-// FIXED: Added delay after setting volume to prevent DFPlayer serial lockup
-// FIXED: Added Backspace logic to Volume/Dud/Servo inputs
-// FIXED: Added Cancel sound for invalid inputs in submenus
+// VERSION: 6.1.0
+// FIXED: Suppressed audio in Volume Menu to prevent DFPlayer freeze
+// FIXED: Allow "501" to disarm in Star Wars mode
+// FIXED: Added OTA update support (via Network.h integration)
 
 #pragma once
 #include <Arduino.h>
@@ -128,6 +128,8 @@ inline void handleKeypadInput(char key) {
       bool matched = false;
       if (strcmp(enteredCode, activeArmCode) == 0) matched = true;
       else if (strcmp(enteredCode, MASTER_CODE) == 0) matched = true;
+      // FIX: Star Wars Exception - allow 501 to disarm even though it's short
+      else if (starWarsModeActive && strcmp(enteredCode, "501") == 0) matched = true;
 
       if (matched) {
         setState(DISARMED);
@@ -364,7 +366,11 @@ inline void handleBeepLogic() {
 inline void handleConfigMode(char key) {
   if (key) {
     displayNeedsUpdate = true;
-    safePlay(SOUND_KEY_PRESS); 
+    
+    // FIX: Suppress keypress sounds specifically in Volume menu to prevent DFPlayer freeze
+    if (currentConfigState != MENU_VOLUME) {
+        safePlay(SOUND_KEY_PRESS); 
+    }
 
     switch(currentConfigState) {
       case MENU_MAIN: {
@@ -499,12 +505,10 @@ inline void handleConfigMode(char key) {
             int val = atoi(configInputBuffer);
             if (val >= 0 && val <= 30) { 
                 settings.sound_volume = val; 
-                delay(500);
-                myDFPlayer.volume(val); // Apply immediately
-                delay(500); // FIX: Wait for DFPlayer to process volume command before sending next audio
-                safePlay(SOUND_MENU_CONFIRM); 
+                // FIX: Removed delay and confirmation sound to prevent lockup
+                myDFPlayer.volume(val); 
             } else {
-                safePlay(SOUND_MENU_CANCEL); // Notify invalid
+                // Not playing cancel sound either, to be safe.
             }
             currentConfigState = MENU_AUDIO_SUBMENU;
          }

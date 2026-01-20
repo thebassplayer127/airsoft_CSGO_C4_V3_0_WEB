@@ -1,7 +1,7 @@
 /*
   PROJECT: Counter-Strike C4 Prop (Project 2)
-  VERSION: 3.7.0
-  DATE: 2025-10-26
+  VERSION: 4.0.1
+  DATE: 2026-01-19
   AUTHOR: Andrew Florio
 
   Header-only modular structure for Arduino IDE, with Wi-Fi + mDNS + WebSocket.
