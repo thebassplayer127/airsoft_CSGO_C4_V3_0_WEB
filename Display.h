@@ -1,7 +1,7 @@
 // Display.h
-// VERSION: 6.0.2
-// FIXED: Added prompts to Volume/Servo/Dud menus to explain controls
-// FIXED: Condensed Servo Settings menu to prevent blank navigation
+// VERSION: 6.2.0
+// OPTIMIZED: Redesigned centerPrint to reduce I2C transactions by ~50%
+// This significantly improves keypad responsiveness during timers.
 
 #pragma once
 #include "State.h"
@@ -16,22 +16,43 @@ inline void clearRow(int row) {
   lcd.print("                    ");
 }
 
+// OPTIMIZED: Builds a full 20-char line in memory and sends it once.
+// Eliminates the need to "clear" the row first, cutting I2C traffic in half.
 inline void centerPrint(const String& text, int row) {
+  char buf[21];
+  memset(buf, ' ', 20); // Fill buffer with spaces
+  buf[20] = '\0';       // Null terminator
+
   int textLength = text.length();
+  // Clamp length to 20
+  if (textLength > 20) textLength = 20;
+
   int padding = (20 - textLength) / 2; 
   if (padding < 0) padding = 0;
-  clearRow(row);
-  lcd.setCursor(padding, row);
-  lcd.print(text);
+
+  // Copy string into the middle of the whitespace buffer
+  memcpy(buf + padding, text.c_str(), textLength);
+
+  lcd.setCursor(0, row);
+  lcd.print(buf);
 }
 
+// OPTIMIZED: C-String version
 inline void centerPrintC(const char* text, int row) {
+  char buf[21];
+  memset(buf, ' ', 20); // Fill buffer with spaces
+  buf[20] = '\0';       // Null terminator
+
   int textLength = strlen(text);
+  if (textLength > 20) textLength = 20;
+
   int padding = (20 - textLength) / 2; 
   if (padding < 0) padding = 0;
-  clearRow(row);
-  lcd.setCursor(padding, row);
-  lcd.print(text);
+
+  memcpy(buf + padding, text, textLength);
+
+  lcd.setCursor(0, row);
+  lcd.print(buf);
 }
 
 inline String boolToOnOff(uint8_t v){ return v?String("ON"):String("OFF"); }
@@ -65,11 +86,20 @@ inline void updateDisplay() {
         for (int i = -1; i <= 1; ++i) {
           int row = i + 2;
           int itemIndex = (configMenuIndex + i + TOTAL) % TOTAL;
-          clearRow(row);
+          // For the menu, we construct the line manually to include the cursor
+          char lineBuf[21];
+          memset(lineBuf, ' ', 20); lineBuf[20] = 0;
+          
+          String itemText = items[itemIndex];
+          if (i == 0) { // Selected item
+             lineBuf[0] = '>';
+             lineBuf[1] = ' ';
+             strncpy(lineBuf + 2, itemText.c_str(), min((int)itemText.length(), 18));
+          } else {
+             strncpy(lineBuf + 2, itemText.c_str(), min((int)itemText.length(), 18));
+          }
           lcd.setCursor(0, row);
-          String line = (i == 0 ? "> " : "  ");
-          line += items[itemIndex];
-          lcd.print(line);
+          lcd.print(lineBuf);
         }
       } break;
 
@@ -103,22 +133,24 @@ inline void updateDisplay() {
          centerPrintC("(1-100)", 1);
          char buffer[21]; snprintf(buffer, sizeof(buffer), "Val: %s", configInputBuffer);
          centerPrintC(buffer, 2);
-         centerPrintC("(#=Save *=Back)", 3); // FIX: Added * prompt
+         centerPrintC("(#=Save *=Back)", 3); 
       } break;
 
       // --- HARDWARE / AUDIO SUBMENU ---
       case MENU_HARDWARE_SUBMENU: {
          centerPrintC("HARDWARE CONFIG", 0);
-         clearRow(1); lcd.setCursor(0,1); lcd.print("1 Audio  2 Servo");
-         clearRow(2); lcd.setCursor(0,2); lcd.print("3 Sensor 4 FX/Xtras");
-         clearRow(3); lcd.setCursor(0,3); lcd.print("* Back");
+         // Manual optimization for static menus isn't strictly necessary but safe
+         lcd.setCursor(0,1); lcd.print("1 Audio  2 Servo    ");
+         lcd.setCursor(0,2); lcd.print("3 Sensor 4 FX/Xtras ");
+         lcd.setCursor(0,3); lcd.print("* Back              ");
       } break;
 
       case MENU_AUDIO_SUBMENU: {
          centerPrintC("AUDIO CONFIG", 0);
-         clearRow(1); lcd.setCursor(0,1); lcd.print("1 Sound: "); lcd.print(settings.sound_enabled ? "ON" : "OFF");
-         clearRow(2); lcd.setCursor(0,2); lcd.print("2 Volume: "); lcd.print(settings.sound_volume);
-         clearRow(3); lcd.setCursor(0,3); lcd.print("* Back");
+         // Use manual printing to ensure clean lines
+         lcd.setCursor(0,1); lcd.print("1 Sound: "); lcd.print(settings.sound_enabled ? "ON " : "OFF"); lcd.print("        ");
+         lcd.setCursor(0,2); lcd.print("2 Volume: "); lcd.print(settings.sound_volume); lcd.print("        ");
+         lcd.setCursor(0,3); lcd.print("* Back              ");
       } break;
 
       case MENU_AUDIO_TOGGLE: {
@@ -132,7 +164,7 @@ inline void updateDisplay() {
          centerPrintC("(0-30)", 1);
          char buffer[21]; snprintf(buffer, sizeof(buffer), "Val: %s", configInputBuffer);
          centerPrintC(buffer, 2);
-         centerPrintC("(#=Save *=Back)", 3); // FIX: Added * prompt
+         centerPrintC("(#=Save *=Back)", 3); 
       } break;
 
       case MENU_PLANT_SENSOR_TOGGLE: {
@@ -144,18 +176,17 @@ inline void updateDisplay() {
       // --- EFFECTS (Easter Eggs / Strobe) ---
       case MENU_EXTRAS_SUBMENU: { 
          centerPrintC("EFFECTS", 0);
-         clearRow(1); lcd.setCursor(0,1); lcd.print("1 Strobe: "); lcd.print(settings.explosion_strobe_enabled ? "ON" : "OFF");
-         clearRow(2); lcd.setCursor(0,2); lcd.print("2 Eggs: "); lcd.print(settings.easter_eggs_enabled ? "ON" : "OFF");
-         clearRow(3); lcd.setCursor(0,3); lcd.print("* Back");
+         lcd.setCursor(0,1); lcd.print("1 Strobe: "); lcd.print(settings.explosion_strobe_enabled ? "ON " : "OFF"); lcd.print("     ");
+         lcd.setCursor(0,2); lcd.print("2 Eggs: "); lcd.print(settings.easter_eggs_enabled ? "ON " : "OFF"); lcd.print("       ");
+         lcd.setCursor(0,3); lcd.print("* Back              ");
       } break;
 
       case MENU_SERVO_SETTINGS: {
         centerPrintC("SERVO CONFIG", 0);
-        // FIX: Condensed layout to fit * Back
-        clearRow(1); lcd.setCursor(0,1); lcd.print("1 Svo:"); lcd.print(settings.servo_enabled ? "ON" : "OFF");
-        clearRow(2); lcd.setCursor(0,2); lcd.print("2 Str:"); lcd.print(settings.servo_start_angle);
-        lcd.print(" 3 End:"); lcd.print(settings.servo_end_angle);
-        clearRow(3); lcd.setCursor(0,3); lcd.print("* Back");
+        lcd.setCursor(0,1); lcd.print("1 Svo:"); lcd.print(settings.servo_enabled ? "ON " : "OFF"); lcd.print("           ");
+        lcd.setCursor(0,2); lcd.print("2 Str:"); lcd.print(settings.servo_start_angle);
+        lcd.print(" 3 End:"); lcd.print(settings.servo_end_angle); lcd.print("  ");
+        lcd.setCursor(0,3); lcd.print("* Back              ");
       } break;
 
       case MENU_SERVO_TOGGLE: {
@@ -169,7 +200,7 @@ inline void updateDisplay() {
          centerPrintC("(0-180)", 1);
          char buffer[21]; snprintf(buffer, sizeof(buffer), "Val: %s", configInputBuffer);
          centerPrintC(buffer, 2);
-         centerPrintC("(#=Save *=Back)", 3); // FIX: Added * prompt
+         centerPrintC("(#=Save *=Back)", 3); 
       } break;
 
       case MENU_SERVO_END_ANGLE: {
@@ -177,7 +208,7 @@ inline void updateDisplay() {
          centerPrintC("(0-180)", 1);
          char buffer[21]; snprintf(buffer, sizeof(buffer), "Val: %s", configInputBuffer);
          centerPrintC(buffer, 2);
-         centerPrintC("(#=Save *=Back)", 3); // FIX: Added * prompt
+         centerPrintC("(#=Save *=Back)", 3); 
       } break;
 
       case MENU_TOGGLE_EASTER_EGGS: {
@@ -207,16 +238,16 @@ inline void updateDisplay() {
 
       case MENU_NETWORK: {
         centerPrintC("NETWORK (Pg 1/2)", 0);
-        clearRow(1); lcd.setCursor(0,1); lcd.print("1 WiFi: "); lcd.print(settings.wifi_enabled ? "ON" : "OFF");
-        clearRow(2); lcd.setCursor(0,2); lcd.print("2 Mode: "); lcd.print(settings.net_use_mdns ? "mDNS" : "IP");
-        clearRow(3); lcd.setCursor(0,3); lcd.print("3 IP 4 Port 9 Next");
+        lcd.setCursor(0,1); lcd.print("1 WiFi: "); lcd.print(settings.wifi_enabled ? "ON " : "OFF"); lcd.print("       ");
+        lcd.setCursor(0,2); lcd.print("2 Mode: "); lcd.print(settings.net_use_mdns ? "mDNS" : "IP  "); lcd.print("       ");
+        lcd.setCursor(0,3); lcd.print("3 IP 4 Port 9 Next  ");
       } break;
 
      case MENU_NETWORK_2: {
         centerPrintC("NETWORK (Pg 2/2)", 0);
-        clearRow(1); lcd.setCursor(0,1); lcd.print("5 MasterIP: "); lcd.print(ipToString(settings.master_ip));
-        clearRow(2); lcd.setCursor(0,2); lcd.print("6 Setup 7 Apply");
-        clearRow(3); lcd.setCursor(0,3); lcd.print("8 Forget  9 Back");
+        lcd.setCursor(0,1); lcd.print("5 MastIP: "); lcd.print(ipToString(settings.master_ip));
+        lcd.setCursor(0,2); lcd.print("6 Setup 7 Apply     ");
+        lcd.setCursor(0,3); lcd.print("8 Forget  9 Back    ");
       } break;
 
       case MENU_NET_ENABLE: {

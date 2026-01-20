@@ -1,5 +1,6 @@
 // Game.h
-// VERSION: 6.1.0
+// VERSION: 6.2.0
+// OPTIMIZED: Beep curve calculation throttled to 100ms
 // FIXED: Suppressed audio in Volume Menu to prevent DFPlayer freeze
 // FIXED: Allow "501" to disarm in Star Wars mode
 // FIXED: Added OTA update support (via Network.h integration)
@@ -322,25 +323,34 @@ inline void handleRfid() {
 inline void handleBeepLogic() {
   // --- Robust Beep State Machine ---
   
-  uint32_t elapsed = millis() - bombArmedTimestamp;
-  if (elapsed > settings.bomb_duration_ms) elapsed = settings.bomb_duration_ms;
+  // Optimization: Recalculate curve only every 100ms
+  static uint32_t lastCurveCalc = 0;
+  static uint32_t cachedInterval = 1000;
+  static uint32_t cachedBeepDuration = BEEP_TONE_DURATION_MS;
 
-  float progress = (float)elapsed / (float)settings.bomb_duration_ms;
-  float virtual_t = progress * 45.0f; 
+  if (millis() - lastCurveCalc > 100) {
+      uint32_t elapsed = millis() - bombArmedTimestamp;
+      if (elapsed > settings.bomb_duration_ms) elapsed = settings.bomb_duration_ms;
 
-  // CS:GO Curve
-  float bps = 1.05f * powf(1.039f, virtual_t);
-  uint32_t interval = (uint32_t)(1000.0f / bps);
+      float progress = (float)elapsed / (float)settings.bomb_duration_ms;
+      float virtual_t = progress * 45.0f; 
 
-  // Determine Duration
-  uint32_t currentBeepDuration = BEEP_TONE_DURATION_MS;
-  if (interval < (BEEP_TONE_DURATION_MS * 2)) {
-     currentBeepDuration = interval / 2;
+      // CS:GO Curve
+      float bps = 1.05f * powf(1.039f, virtual_t);
+      cachedInterval = (uint32_t)(1000.0f / bps);
+
+      // Determine Duration
+      if (cachedInterval < (BEEP_TONE_DURATION_MS * 2)) {
+         cachedBeepDuration = cachedInterval / 2;
+      } else {
+         cachedBeepDuration = BEEP_TONE_DURATION_MS;
+      }
+      lastCurveCalc = millis();
   }
 
   // --- Cycle Calculation ---
   uint32_t delta = millis() - lastBeepTimestamp;
-  if (delta >= interval) {
+  if (delta >= cachedInterval) {
      lastBeepTimestamp = millis();
      delta = 0;
   }
@@ -348,7 +358,7 @@ inline void handleBeepLogic() {
   // Robust ON/OFF Logic
   static bool isBeeping = false;
   
-  if (delta < currentBeepDuration) {
+  if (delta < cachedBeepDuration) {
      if (!isBeeping) {
         beepStart(BEEP_TONE_FREQ);
         ledIsOn = true;

@@ -1,6 +1,6 @@
 // Hardware.h
-// VERSION: 3.0.0
-// ADDED: Volume control and Sound Toggle support
+// VERSION: 3.1.0
+// OPTIMIZED: Increased I2C Clock to 400kHz for faster LCD updates
 
 #pragma once
 #include <Wire.h>
@@ -42,6 +42,7 @@ inline void initHardware() {
 
   // LCD
   Wire.begin();
+  Wire.setClock(400000); // FIX: Set I2C to 400kHz (Fast Mode) to reduce display lag
   lcd.begin(20, 4);
   lcd.backlight();
 
