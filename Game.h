@@ -1,9 +1,10 @@
 // Game.h
-// VERSION: 6.2.0
+// VERSION: 6.3.0
 // OPTIMIZED: Beep curve calculation throttled to 100ms
-// FIXED: Suppressed audio in Volume Menu to prevent DFPlayer freeze
+// ADDED: Safety Clamp to beep interval to prevent math glitches at end of timer
+// FIXED: Suppressed audio in Volume Menu
 // FIXED: Allow "501" to disarm in Star Wars mode
-// FIXED: Added OTA update support (via Network.h integration)
+// FIXED: OTA update support
 
 #pragma once
 #include <Arduino.h>
@@ -23,7 +24,7 @@ bool bondModeActive = false;
 bool suddenDeathActive = false;
 bool easterEggActive = false; 
 
-// Cache for unsaved RAM settings (so we don't revert to EEPROM after special modes)
+// Cache for unsaved RAM settings
 uint32_t stored_duration_ram = 0;
 
 inline bool parseIpFromBuffer(const char* buf, uint32_t& out) {
@@ -37,12 +38,10 @@ inline bool parseIpFromBuffer(const char* buf, uint32_t& out) {
 }
 
 inline void handleArmSwitch() {
-  // --- STAR WARS MODE TOGGLE FX (Pre-Game) ---
   if (currentState == STARWARS_PRE_GAME && armSwitch.rose()) {
      safePlay(SOUND_POWER_LIGHTSABER);
   }
 
-  // --- SUDDEN DEATH MODE LOGIC ---
   if (settings.sudden_death_mode) {
     if (armSwitch.rose()) { 
        if (currentState == STANDBY || currentState == PROP_IDLE) {
@@ -66,7 +65,6 @@ inline void handleArmSwitch() {
     return; 
   }
 
-  // --- NORMAL LOGIC ---
   if (armSwitch.rose()) {
     if (currentState == DISARMED || currentState == EXPLODED || currentState == PROP_IDLE || currentState == AWAIT_ARM_TOGGLE || currentState == PROP_DUD) {
       resetSpecialModes(); 
@@ -80,7 +78,6 @@ inline void handleArmSwitch() {
 inline void handleKeypadInput(char key) {
   if (!key) return;
 
-  // --- STAR WARS PRE-GAME FX ---
   if (currentState == STARWARS_PRE_GAME) {
      if (isdigit(key)) {
         safePlay(random(SOUND_SWING_START, SOUND_SWING_END + 1));
@@ -93,8 +90,6 @@ inline void handleKeypadInput(char key) {
            return; 
         }
         strcpy(activeArmCode, MASTER_CODE); 
-        
-        // Cache current RAM duration before override
         stored_duration_ram = settings.bomb_duration_ms;
         settings.bomb_duration_ms = 350000; 
 
@@ -124,12 +119,10 @@ inline void handleKeypadInput(char key) {
       enteredCode[len + 1] = '\0';
     }
     
-    // --- Disarm Check Logic ---
     if (currentState == DISARMING_KEYPAD) {
       bool matched = false;
       if (strcmp(enteredCode, activeArmCode) == 0) matched = true;
       else if (strcmp(enteredCode, MASTER_CODE) == 0) matched = true;
-      // FIX: Star Wars Exception - allow 501 to disarm even though it's short
       else if (starWarsModeActive && strcmp(enteredCode, "501") == 0) matched = true;
 
       if (matched) {
@@ -171,7 +164,6 @@ inline void handleKeypadInput(char key) {
       resetSpecialModes();
       bool ee = settings.easter_eggs_enabled;
 
-      // --- CHECK CODES ---
       if (ee && strcmp(enteredCode, "501") == 0) {
          setState(STARWARS_PRE_GAME);
          enteredCode[0] = '\0'; 
@@ -182,11 +174,8 @@ inline void handleKeypadInput(char key) {
          c4OnEnterArmed(); setState(ARMED);
       } else if (ee && strcmp(enteredCode, "8675309") == 0) {
          strcpy(activeArmCode, enteredCode);
-         
-         // Cache current RAM duration before override
          stored_duration_ram = settings.bomb_duration_ms;
          settings.bomb_duration_ms = 222000;
-
          bombArmedTimestamp = millis();
          safePlay(SOUND_JENNY); 
          c4OnEnterArmed(); setState(ARMED);
@@ -209,11 +198,8 @@ inline void handleKeypadInput(char key) {
       } else if (ee && strcmp(enteredCode, "007") == 0) {
          bondModeActive = true;
          strcpy(activeArmCode, enteredCode);
-
-         // Cache current RAM duration before override
          stored_duration_ram = settings.bomb_duration_ms;
          settings.bomb_duration_ms = 105000;
-
          bombArmedTimestamp = millis();
          safePlay(SOUND_BOND_INTRO); 
          c4OnEnterArmed(); setState(ARMED);
@@ -279,7 +265,6 @@ inline void handleDisarmButton() {
   if (currentState == ARMED || currentState == DISARMING_KEYPAD) {
     if (disarmButton.fell()) setState(DISARMING_MANUAL);
   }
-  // FIX: Explicitly stop audio when releasing button to cut off Loop track
   if (currentState == DISARMING_MANUAL && disarmButton.rose()) {
       myDFPlayer.stop(); 
       setState(ARMED);
@@ -323,11 +308,11 @@ inline void handleRfid() {
 inline void handleBeepLogic() {
   // --- Robust Beep State Machine ---
   
-  // Optimization: Recalculate curve only every 100ms
   static uint32_t lastCurveCalc = 0;
   static uint32_t cachedInterval = 1000;
   static uint32_t cachedBeepDuration = BEEP_TONE_DURATION_MS;
 
+  // Optimize: Recalculate curve every 100ms
   if (millis() - lastCurveCalc > 100) {
       uint32_t elapsed = millis() - bombArmedTimestamp;
       if (elapsed > settings.bomb_duration_ms) elapsed = settings.bomb_duration_ms;
@@ -335,11 +320,12 @@ inline void handleBeepLogic() {
       float progress = (float)elapsed / (float)settings.bomb_duration_ms;
       float virtual_t = progress * 45.0f; 
 
-      // CS:GO Curve
       float bps = 1.05f * powf(1.039f, virtual_t);
       cachedInterval = (uint32_t)(1000.0f / bps);
+      
+      // Safety Clamp: Don't let interval drop below 50ms to prevent glitches
+      if (cachedInterval < 50) cachedInterval = 50;
 
-      // Determine Duration
       if (cachedInterval < (BEEP_TONE_DURATION_MS * 2)) {
          cachedBeepDuration = cachedInterval / 2;
       } else {
@@ -355,7 +341,6 @@ inline void handleBeepLogic() {
      delta = 0;
   }
 
-  // Robust ON/OFF Logic
   static bool isBeeping = false;
   
   if (delta < cachedBeepDuration) {
@@ -377,14 +362,13 @@ inline void handleConfigMode(char key) {
   if (key) {
     displayNeedsUpdate = true;
     
-    // FIX: Suppress keypress sounds specifically in Volume menu to prevent DFPlayer freeze
     if (currentConfigState != MENU_VOLUME) {
         safePlay(SOUND_KEY_PRESS); 
     }
 
     switch(currentConfigState) {
       case MENU_MAIN: {
-        const int N = 10; // Increased to 10 items
+        const int N = 10;
         if (key == '2') configMenuIndex = (configMenuIndex - 1 + N) % N;
         if (key == '8') configMenuIndex = (configMenuIndex + 1) % N;
         if (key == '#') {
@@ -409,7 +393,6 @@ inline void handleConfigMode(char key) {
               requestRestart(600);
             } break;
             case 9: {
-              // Exit without saving changes to EEPROM, BUT KEEP RAM
               currentConfigState = MENU_EXIT_NO_SAVE;
               displayNeedsUpdate = true;
               safePlay(SOUND_MENU_CANCEL);
@@ -461,7 +444,6 @@ inline void handleConfigMode(char key) {
           size_t len = strlen(configInputBuffer);
           if (len + 1 < CONFIG_INPUT_MAX) { configInputBuffer[len] = key; configInputBuffer[len+1] = '\0'; }
         }
-        // FIX: Added Backspace Logic
         if (key == '*') {
             size_t len = strlen(configInputBuffer);
             if (len > 0) configInputBuffer[len-1] = '\0';
@@ -484,7 +466,7 @@ inline void handleConfigMode(char key) {
         if (key == '1') currentConfigState = MENU_AUDIO_SUBMENU;
         if (key == '2') currentConfigState = MENU_SERVO_SETTINGS;
         if (key == '3') currentConfigState = MENU_PLANT_SENSOR_TOGGLE;
-        if (key == '4') currentConfigState = MENU_EXTRAS_SUBMENU; // FX
+        if (key == '4') currentConfigState = MENU_EXTRAS_SUBMENU;
         if (key == '*') currentConfigState = MENU_MAIN;
       } break;
 
@@ -505,7 +487,6 @@ inline void handleConfigMode(char key) {
             size_t len = strlen(configInputBuffer);
             if (len + 1 < CONFIG_INPUT_MAX) { configInputBuffer[len] = key; configInputBuffer[len+1] = '\0'; }
          }
-         // FIX: Added Backspace Logic
          if (key == '*') {
             size_t len = strlen(configInputBuffer);
             if (len > 0) configInputBuffer[len-1] = '\0';
@@ -515,10 +496,7 @@ inline void handleConfigMode(char key) {
             int val = atoi(configInputBuffer);
             if (val >= 0 && val <= 30) { 
                 settings.sound_volume = val; 
-                // FIX: Removed delay and confirmation sound to prevent lockup
                 myDFPlayer.volume(val); 
-            } else {
-                // Not playing cancel sound either, to be safe.
             }
             currentConfigState = MENU_AUDIO_SUBMENU;
          }
@@ -529,14 +507,12 @@ inline void handleConfigMode(char key) {
          if (key == '*') currentConfigState = MENU_HARDWARE_SUBMENU;
       } break;
 
-      // --- EXTRAS (FX) SUBMENU ---
       case MENU_EXTRAS_SUBMENU: {
         if (key == '1') currentConfigState = MENU_TOGGLE_STROBE;
         if (key == '2') currentConfigState = MENU_TOGGLE_EASTER_EGGS;
         if (key == '*') currentConfigState = MENU_HARDWARE_SUBMENU;
       } break;
 
-      // --- SERVO SETTINGS ---
       case MENU_SERVO_SETTINGS: {
         if (key == '1') currentConfigState = MENU_SERVO_TOGGLE;
         if (key == '2') { configInputBuffer[0]='\0'; currentConfigState = MENU_SERVO_START_ANGLE; }
@@ -554,7 +530,6 @@ inline void handleConfigMode(char key) {
             size_t len = strlen(configInputBuffer);
             if (len + 1 < CONFIG_INPUT_MAX) { configInputBuffer[len] = key; configInputBuffer[len+1] = '\0'; }
         }
-        // FIX: Added Backspace Logic
         if (key == '*') {
             size_t len = strlen(configInputBuffer);
             if (len > 0) configInputBuffer[len-1] = '\0';
@@ -577,7 +552,6 @@ inline void handleConfigMode(char key) {
             size_t len = strlen(configInputBuffer);
             if (len + 1 < CONFIG_INPUT_MAX) { configInputBuffer[len] = key; configInputBuffer[len+1] = '\0'; }
         }
-        // FIX: Added Backspace Logic
         if (key == '*') {
             size_t len = strlen(configInputBuffer);
             if (len > 0) configInputBuffer[len-1] = '\0';
@@ -614,7 +588,6 @@ inline void handleConfigMode(char key) {
           } else if (rfidViewIndex == settings.num_rfid_uids) {
             if (settings.num_rfid_uids < MAX_RFID_UIDS) {
                currentConfigState = MENU_ADD_RFID;
-               // Wake up reader when entering Add Mode
                rfid.PCD_Init(); 
             }
             else safePlay(SOUND_MENU_CANCEL);

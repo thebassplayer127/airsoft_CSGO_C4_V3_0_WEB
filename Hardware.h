@@ -1,6 +1,7 @@
 // Hardware.h
-// VERSION: 3.1.0
-// OPTIMIZED: Increased I2C Clock to 400kHz for faster LCD updates
+// VERSION: 3.5.0
+// OPTIMIZED: I2C at 400kHz
+// FIXED: Buzzer Duty Cycle set to 128 (50%) for MAX VOLUME
 
 #pragma once
 #include <Wire.h>
@@ -33,6 +34,10 @@ extern Keypad keypad;
 static uint32_t lastAudioCmdTime = 0;
 static const uint32_t AUDIO_COOLDOWN_MS = 100; 
 
+// --- BUZZER CONFIG ---
+static const int BEEP_LEDC_CH = 4;
+static const int BEEP_LEDC_RES = 8; // 8-bit resolution
+
 inline void initHardware() {
   // FastLED
   FastLED.addLeds<NEOPIXEL, NEOPIXEL_PIN>(leds, NUM_LEDS); 
@@ -42,7 +47,7 @@ inline void initHardware() {
 
   // LCD
   Wire.begin();
-  Wire.setClock(400000); // FIX: Set I2C to 400kHz (Fast Mode) to reduce display lag
+  Wire.setClock(400000); // 400kHz Fast Mode
   lcd.begin(20, 4);
   lcd.backlight();
 
@@ -53,7 +58,7 @@ inline void initHardware() {
   // DFPlayer
   Serial0.begin(9600);
   myDFPlayer.begin(Serial0, true, true);
-  myDFPlayer.volume(settings.sound_volume); // Apply saved volume
+  myDFPlayer.volume(settings.sound_volume);
 
   // Inputs
   disarmButton.attach(DISARM_BUTTON_PIN, INPUT_PULLUP);
@@ -62,13 +67,15 @@ inline void initHardware() {
   armSwitch.interval(25);
   armSwitch.update();
 
-  // Buzzer Setup handled in beepStart/Stop dynamically
+  // Buzzer Setup (One-time Init)
+  ledcAttachPin(BEEP_BUZZER_PIN, BEEP_LEDC_CH);
+  ledcSetup(BEEP_LEDC_CH, BEEP_TONE_FREQ, BEEP_LEDC_RES);
+  ledcWrite(BEEP_LEDC_CH, 0); // Ensure silence at boot
 }
 
 // --- AUDIO SAFE WRAPPER ---
-// Prevents DFPlayer lockups and respects "Sound Enabled" setting
 inline void safePlay(int track) {
-  if (!settings.sound_enabled) return; // Mute check
+  if (!settings.sound_enabled) return; 
 
   if (millis() - lastAudioCmdTime > AUDIO_COOLDOWN_MS) {
     myDFPlayer.play(track);
@@ -77,16 +84,19 @@ inline void safePlay(int track) {
 }
 
 // --- BUZZER CONTROL ---
-static const int BEEP_LEDC_CH = 4;
-
 inline void beepStart(int freqHz) {
-  // Re-attach pin only when needed
-  ledcAttachPin(BEEP_BUZZER_PIN, BEEP_LEDC_CH);
-  ledcWriteTone(BEEP_LEDC_CH, freqHz);
+  static int currentFreq = -1;
+
+  if (currentFreq != freqHz) {
+    ledcSetup(BEEP_LEDC_CH, freqHz, BEEP_LEDC_RES);
+    currentFreq = freqHz;
+  }
+  
+  // MAX VOLUME: 50% Duty Cycle (128/255)
+  // This provides the maximum power transfer for a square wave.
+  ledcWrite(BEEP_LEDC_CH, 128); 
 }
 
 inline void beepStop() {
-  // Write 0 AND Detach to ensure absolute silence (no whine)
   ledcWrite(BEEP_LEDC_CH, 0);
-  ledcDetachPin(BEEP_BUZZER_PIN); 
 }

@@ -1,20 +1,19 @@
 // Config.h
-// VERSION: 4.0.1
-// ADDED: Sound Toggle, Volume Control, Plant Sensor Toggle
-// CHANGED: Defaults (WiFi OFF, Servo OFF, Sensor OFF)
+// VERSION: 4.1.0
+// FIXED: Buzzer Frequency set to 2400Hz (Resonant Peak for 12085 Buzzer)
 
 #pragma once
 #include <Arduino.h>
 #include <EEPROM.h>
 
 // Version
-static const char* FW_VERSION = "4.0.1";
+static const char* FW_VERSION = "4.1.0";
 
 // EEPROM / Settings
 #define EEPROM_SIZE 512
 #define MAX_RFID_UIDS 10
-#define SETTINGS_MAGIC    0xC4C40205 // Magic changed for struct update
-#define SETTINGS_VERSION  5          // Version bumped
+#define SETTINGS_MAGIC    0xC4C40205 
+#define SETTINGS_VERSION  5          
 
 struct Settings {
   uint32_t magic_number;
@@ -37,11 +36,11 @@ struct Settings {
   uint8_t  servo_end_angle;         // e.g., 90
   
   // --- AUDIO ---
-  uint8_t  sound_enabled;           // 0=Off, 1=On (NEW)
-  uint8_t  sound_volume;            // 0-30 (NEW)
+  uint8_t  sound_enabled;           // 0=Off, 1=On
+  uint8_t  sound_volume;            // 0-30
   
   // --- SENSORS & EXTRAS ---
-  uint8_t  plant_sensor_enabled;    // 0=Off, 1=On (NEW)
+  uint8_t  plant_sensor_enabled;    // 0=Off, 1=On
   uint8_t  easter_eggs_enabled;     // 0=Off, 1=On
   uint8_t  explosion_strobe_enabled;// 0=Off, 1=On
 
@@ -74,7 +73,8 @@ static constexpr uint32_t RANDOM_DIGIT_UPDATE_MS  = 150;
 static constexpr uint32_t EASTER_EGG_CYCLE_MS     = 100;
 
 // Audio / Visual
-static constexpr int      BEEP_TONE_FREQ          = 2000;
+// FIXED: Updated to 2400Hz to match 12085 Buzzer resonance
+static constexpr int      BEEP_TONE_FREQ          = 2400; 
 static constexpr uint32_t BEEP_TONE_DURATION_MS   = 225;
 static constexpr int      NEOPIXEL_BRIGHTNESS     = 255;
 static constexpr size_t   CONFIG_INPUT_MAX        = 16;
@@ -94,21 +94,21 @@ inline void factoryResetSettings() {
   settings.dud_enabled             = 0; 
   settings.dud_chance              = 5; 
   
-  // Audio Defaults (User Request: Sound ON, Volume Default 20)
+  // Audio Defaults 
   settings.sound_enabled           = 1;
   settings.sound_volume            = 20;
 
-  // Hardware Defaults (User Request: Servo OFF, Plant Sensor OFF)
+  // Hardware Defaults 
   settings.servo_enabled           = 0; 
   settings.servo_start_angle       = 0;
   settings.servo_end_angle         = 90;
   settings.plant_sensor_enabled    = 0;
 
   // Extras
-  settings.easter_eggs_enabled     = 1; // Default On
-  settings.explosion_strobe_enabled= 1; // Default On
+  settings.easter_eggs_enabled     = 1; 
+  settings.explosion_strobe_enabled= 1; 
   
-  // Network Defaults (User Request: WiFi OFF)
+  // Network Defaults 
   settings.num_rfid_uids           = 0;
   settings.wifi_enabled            = 0; 
   settings.net_use_mdns            = 1;
