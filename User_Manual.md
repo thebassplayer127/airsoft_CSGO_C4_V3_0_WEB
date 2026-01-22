@@ -1,40 +1,36 @@
-TACTICAL C4 SIMULATOR (V3.7) - FIELD MANUAL
+TACTICAL C4 SIMULATOR - FIELD MANUAL
+
+Firmware Version: 4.1.1 Designed by Andrew Florio
 
 ⚡ 1-PAGE QUICK START GUIDE
 
-DEFAULT ARMING CODE: 7355608
-
 1. POWER ON
 
-Flip the main power switch (battery). The screen will show the version number and then enter STANDBY or IDLE.
+Flip the main power switch. The screen will show the version number and credits, then enter STANDBY or IDLE.
 
 2. PLANTING THE BOMB (ARMING)
 
-Place the Unit: You must place the unit on the designated "Plant Spot" (Magnet) if a sensor is installed.
+Place the Unit: If the Plant Sensor is enabled, place the unit on the magnetic "Plant Spot".
 
 Arm Switch: Flip the ARM SWITCH to the ON position.
 
-Enter Code: Type 7 3 5 5 6 0 8 on the keypad.
+Enter Code: Type 7 3 5 5 6 0 8 on the keypad or any code the user wants.
 
 Confirm: Press #.
 
 Audio: "Bomb has been planted."
 
-Visual: Timer starts counting down. LED flashes RED.
+Visual: Timer starts. Status LED flashes RED.
 
 3. DEFUSING
 
 There are three ways to stop the countdown:
 
-METHOD A (The Button): Press and HOLD the blue Disarm Button.
+METHOD A (The Button): Press and HOLD the blue Disarm Button. Do not let go until the screen says "BOMB DEFUSED".
 
-A progress bar will appear.
+METHOD B (The Code): Type the arming code (7355608 or user code) on the keypad.
 
-DO NOT LET GO until the screen says "BOMB DEFUSED".
-
-METHOD B (The Code): Type the same code used to arm it (7355608) on the keypad.
-
-METHOD C (RFID Card): Tap a registered Admin or User card against the RFID reader.
+METHOD C (RFID Card): Tap a registered card into the slot reader.
 
 4. RESETTING
 
@@ -42,17 +38,15 @@ Once the round is over (Exploded or Defused):
 
 Flip the ARM SWITCH to OFF.
 
-Press the Disarm Button once if the screen is stuck.
-
 The unit returns to STANDBY.
 
 📖 TABLE OF CONTENTS
 
-Hardware Overview
+Hardware Overview & Status Lights
 
 Standard Gameplay
 
-Special Game Modes
+Special Game Modes & Codes
 
 Configuration Menu (Admin)
 
@@ -60,71 +54,163 @@ Network & WiFi Setup
 
 Troubleshooting
 
-CHAPTER 1: HARDWARE OVERVIEW
+CHAPTER 1: HARDWARE OVERVIEW & STATUS LIGHTS
+
+The Controls
 
 LCD Screen: Displays timer, status, and menus.
 
-Keypad: Used for entering codes and menu navigation.
+Keypad: Used for codes and menu navigation.
 
-Arm Switch (Toggle): A toggle switch. UP is ON, DOWN is OFF. Used to initiate the arming sequence.
+Arm Switch: Toggle switch. UP=ON, DOWN=OFF. Initiates arming.
 
-Disarm Button (Push): A momentary button. Used for manual defusal or resetting the round.
+Disarm Button: Blue push button. Used for manual defusal.
 
-Status LED: Large LED that indicates game state (Yellow=Idle, Red=Armed, Green=Defused, Blue=Disarming).
+Plant Sensor: (Optional) Magnetic sensor on bottom. Requires magnet to arm.
 
-RFID Reader: Hidden internal sensor for keycards.
+Status Indicators
 
-Plant Sensor: (Optional) A sensor on the bottom of the unit. Requires a magnet to be present to allow arming.
+1. Main Status LED (The "Game" Light)
+
+This is the large external LED (or LED strip) that indicates the game state.
+
+Color
+
+Behavior
+
+State
+
+Yellow
+
+Solid
+
+IDLE / READY (Waiting for code)
+
+Red
+
+Blinking
+
+ARMED (Counts down with the beep)
+
+Blue
+
+Solid
+
+DISARMING (Button or RFID active)
+
+Green
+
+Solid
+
+DEFUSED (Counter-Terrorists Win)
+
+Red
+
+Solid/Strobe
+
+EXPLODED (Terrorists Win)
+
+Deep Pink
+
+Solid
+
+CONFIG MODE (Admin Menu)
+
+Purple/Orange
+
+Toggling
+
+DUD (Bomb failed to detonate)
+
+2. Network LED (Onboard Chip)
+
+This is the small RGB LED located directly on the Arduino Nano ESP32 board. It indicates WiFi/Server status.
+
+Color
+
+Behavior
+
+State
+
+Yellow
+
+Pulsing
+
+WiFi Disabled (Offline Mode)
+
+Green
+
+Solid
+
+WiFi Connected (But not connected to Scoreboard)
+
+Blue
+
+Solid
+
+ONLINE (WiFi + Scoreboard Connected)
+
+Red
+
+Solid
+
+Connection Failed (Check IP/WiFi)
 
 CHAPTER 2: STANDARD GAMEPLAY
 
 The Plant Requirement
 
-If your unit is equipped with a Plant Sensor, the bomb cannot be armed unless it is physically placed on a target containing a magnet.
+If the Plant Sensor is enabled in the Hardware Menu:
 
-Error Message: If you try to arm while holding the bomb, the screen will read: ERROR: MUST PLANT ON SITE FIRST!
+You MUST place the bomb on a magnetic surface to arm it.
 
-The Timer
+If you try to arm while holding it, the screen will read: ERROR: MUST PLANT ON SITE FIRST!
 
-By default, the bomb is set to 45 Seconds. As time runs out, the beeping and LED flashing will speed up (simulating the CS:GO "stress curve").
+The Timer logic
+
+Stress Curve: As the timer counts down, the beeping and LED flashing will speed up, simulating the CS:GO stress curve.
+
+35-Second Mark: Beeps become faster.
+
+10-Second Mark: Beeps become rapid.
 
 The Explosion
 
 When the timer hits 00:00:
 
-Audio: A massive detonation sound plays.
+Audio: Massive detonation sound.
 
-Visual: The LEDs turn solid RED (or strobe, if enabled).
+Visual: LEDs turn Red (or Strobe White if enabled).
 
-Physical: If the Shell Ejector is installed, the top mechanism will physically "pop" open.
+Physical: If the Shell Ejector is enabled, the an airsoft 40mm shell will go off.
 
-The Defuse Time
+Defusing
 
-Manual (Button): Takes 10 seconds by default.
+Manual (Button): Default 15s. Hold the button. Releasing it early resets progress.
 
-RFID (Card): Takes 5 seconds by default.
+RFID (Card): Default 5s. Hold card against reader.
 
 Code: Instant.
 
 CHAPTER 3: SPECIAL GAME MODES & CODES
 
-Instead of the standard 7355608, you can enter special codes during the Arming phase to activate different modes.
+Enter these codes instead of the standard code to activate special modes.
 
 ☠️ Sudden Death Mode
 
-How to Activate: Enable in Admin Menu (See Chapter 4).
+Activation: Enable in Admin Menu (Sudden Death).
 
-Behavior: No code is required!
+Behavior: NO CODE REQUIRED.
 
-Flip Arm Switch ON -> Bomb Arms immediately.
+Flip Arm Switch ON -> Arms immediately.
 
-Flip Arm Switch OFF -> Bomb Disarms immediately.
+Flip Arm Switch OFF -> Disarms immediately.
 
 Use Case: Fast-paced elimination rounds.
 
-🎬 "Pop Culture" Modes
+🎬 "Pop Culture" Easter Eggs
 
-Enter these codes instead of the standard code to change the sound effects and timer logic for that round.
+Enable "Easter Eggs" in the Hardware Menu to use these.
 
 Code
 
@@ -136,13 +222,13 @@ Description
 
 Star Wars
 
-Plays Imperial March. Keypad buttons make Lightsaber sounds.
+Plays Imperial March. Keypad keys trigger Lightsaber sounds. Press # to Arm.
 
 666666
 
 DOOM
 
-Chaotic LED fire effects. Plays Heavy Metal music. Arms instantly.
+Chaotic "Hellfire" LEDs. Plays Heavy Metal. Arms instantly.
 
 007
 
@@ -154,7 +240,7 @@ Timer set to 1m 45s. Plays Goldeneye Theme.
 
 Terminator
 
-Special "Hasta La Vista" sounds.
+"Hasta La Vista" sounds. Special win/loss audio.
 
 8675309
 
@@ -184,113 +270,163 @@ Plays the massive THX "Deep Note" sound.
 
 Spaceballs
 
-Fails to arm. Mocks the user for a "stupid combination".
+Fails to arm. Mocks user for "stupid combination".
+
+3141592
+
+Nerd Mode
+
+Arms with "Nerd" sound effect.
+
+7777777
+
+Jackpot
+
+Arms with Slot Machine payout sound.
 
 🎲 Dud Bomb
 
-How to Activate: Enable in Admin Menu.
+Activation: Enable in Admin Menu. Set a percentage (e.g., 5%).
 
-Behavior: There is a random chance (e.g., 5%) that when the timer hits 00:00, the bomb will fail to explode and play a "Sad Trombone" sound instead.
+Behavior: When the timer hits 00:00, there is a chance the bomb will fail to explode. It will play a "Sad Trombone" sound and the LEDs will toggle Purple/Orange.
 
 CHAPTER 4: CONFIGURATION MENU (ADMIN)
 
-To change settings, you must enter the Config Mode.
+This is where you customize the device.
 
 Entering Config Mode
 
 Turn the device OFF.
 
-Press and HOLD the * key on the keypad.
+Press and HOLD the * key.
 
 Turn the device ON while holding *.
 
-Release when you see the "CONFIG" menu.
+Release when you see the pink LED or "CONFIG" on screen.
 
-Navigation Controls
+Navigation
 
 2: Scroll UP
 
 8: Scroll DOWN
 
-#: ENTER / SELECT / SAVE
+#: SELECT / ENTER / SAVE
 
 *: BACK / CANCEL
 
-Menu Options
+📂 Main Menu Structure
 
-Bomb Time: Set countdown duration in milliseconds (e.g., 45000 = 45 seconds).
+1. Bomb Time
 
-Manual Disarm: Set how long the button must be held (ms).
+Set the countdown duration in milliseconds.
 
-RFID Disarm: Set how long the card must be held (ms).
+Example: 45000 = 45 Seconds. 120000 = 2 Minutes.
 
-Sudden Death: Toggle ON/OFF.
+2. Manual Disarm
 
-Dud Settings: Toggle ON/OFF and set percentage chance.
+Set how long the Blue Button must be held to defuse (ms).
 
-RFID Tags:
+3. RFID Disarm
 
-View: See registered tag IDs.
+Set how long an RFID card must be held to defuse (ms).
 
-Add: Select "Add New", then tap a card to register it.
+4. Sudden Death
 
-Clear: Erase all stored cards.
+Toggle Sudden Death Mode ON/OFF.
 
-Settings & Servo:
+5. Dud Settings
 
-Servo: Enable/Disable the physical ejector. Set angles.
+Toggle: Enable/Disable Dud mechanics.
 
-Easter Eggs: Enable/Disable the special codes.
+Set Chance: Set the probability (0-100%) of a dud.
 
-Strobe: Toggle the white flashing light on explosion.
+6. RFID Tags
 
-Network: (See Chapter 5).
+Manage keycards.
 
-Save & Exit: Saves changes to memory and reboots.
+View: Scroll through registered card IDs.
+
+Add New: Select this, then tap a new card to register it.
+
+Clear All: Erases all trusted cards.
+
+7. Hardware & Audio (Submenu)
+
+1 Audio:
+
+Sound: Toggle all sound effects ON/OFF.
+
+Volume: Set volume level (0-30).
+
+2 Servo (Shell Ejector):
+
+Svo: Enable/Disable the physical ejector.
+
+Str: Set Start Angle (Closed position).
+
+End: Set End Angle (Open position).
+
+3 Sensor:
+
+Enable/Disable the Plant Sensor requirement.
+
+4 FX/Xtras:
+
+Strobe: Toggle white explosion strobe.
+
+Eggs: Enable/Disable Easter Egg codes.
+
+8. Network (Submenu)
+
+See Chapter 5 for details.
+
+9. Save & Exit
+
+IMPORTANT: You must select this to save your changes! The device will reboot.
+
+10. Exit
+
+Leaves the menu without saving to memory (changes strictly for this session).
 
 CHAPTER 5: NETWORK & WIFI SETUP
 
-This device can connect to a Wi-Fi network to send game stats to a Scoreboard Server.
+This device connects to a Scoreboard Server to broadcast game events (Plant, Defuse, Explosion).
 
-Connecting to Wi-Fi
+Step 1: Connect to WiFi
 
-Enter Config Mode (Hold * on boot).
+Enter Config Mode.
 
-Go to Network -> Page 2 -> WiFi Setup.
+Go to Network -> 9 Next -> 6 Setup.
 
 The screen will display AP: C4Prop-Setup.
 
-On your phone/laptop, connect to the WiFi network named C4Prop-Setup.
+On your phone/PC, connect to the WiFi network C4Prop-Setup.
 
-A window should pop up (Captive Portal). If not, go to 192.168.4.1 in your browser.
+A portal window will open. Select your local WiFi SSID and enter the password.
 
-Select your local WiFi network and enter the password.
+The device will save and allow you to exit the menu.
 
-The device will save and reboot.
+Step 2: Server Configuration
 
-Setting the Scoreboard IP
+You must tell the bomb where the Scoreboard Server is.
 
-If you are running a scoreboard server, you need to tell the bomb where it is.
+Go to Network.
 
-In Config Mode, go to Network -> IP.
+Mode: Select mDNS (easier) or IP (advanced).
 
-Typing the IP:
+mDNS: Looks for scoreboard.local.
 
-Use number keys 0-9.
+IP: You manually type the server's IP address (e.g., 192.168.1.50). Use * to type a dot.
 
-Use * to insert a dot (.).
-
-Use # to Save.
-
-Example: To type 192.168.1.50, press: 192 * 168 * 1 * 50 #.
+Port: Default is 8080.
 
 Emergency Offline Mode
 
-If the WiFi is down and the bomb is trying to connect (causing delays on boot), you can force it offline for one session:
+If you are at a field with no WiFi, the device might pause on boot trying to connect.
 
-Hold # while turning the device ON.
+Force Offline: Hold # while turning the device ON.
 
-The LEDs will pulse Yellow, indicating WiFi is disabled for this game.
+The Onboard LED will pulse Yellow, and WiFi will be disabled for that game.
 
 CHAPTER 6: TROUBLESHOOTING
 
@@ -300,40 +436,40 @@ Possible Cause
 
 Solution
 
-Device won't Arm
+"ERROR: MUST PLANT"
 
-Plant Sensor
+Plant Sensor Enabled
 
-Ensure the device is placed on the magnetic plant spot.
+Place unit on the magnet pad, or disable Sensor in Hardware menu.
 
-"System Offline"
+Device freezes on boot
 
-Arm Switch
+Network Search
 
-Flip the Arm Switch to OFF, then back to ON.
+Hold # during boot to force Offline Mode.
 
-Keypad is sluggish
+Servo buzzes/hums
 
-Network Lag
+Angle Stress
 
-The device might be trying to connect to a missing WiFi. Reboot holding # to force offline mode.
+Adjust Start/End Angles in Hardware -> Servo menu (e.g., change 0 to 5).
 
-Servo hums/buzzes
+Audio cuts out
 
-Angle Settings
+Power/SD
 
-Go to Config -> Settings -> Servo. Adjust Start/End angles slightly (e.g., change 0 to 5).
-
-No Sound
-
-Volume/Card
-
-Check volume knob (if present). Ensure SD card files are named correctly (0001.mp3, etc.).
+Check battery charge. Ensure SD card is seated.
 
 Cannot enter IP
 
-Wrong Key
+Keypad
 
-Remember: In the IP menu, the * key types a dot.
+Use * to type a dot (.). Use # to save.
 
-Manual generated for Firmware v3.7.1
+Status LED is Off
+
+Standby Mode
+
+The status LED is intentionally off in Standby to save power.
+
+Manual generated for Firmware v4.1.0

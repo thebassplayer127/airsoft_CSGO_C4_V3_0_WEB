@@ -119,7 +119,15 @@ void setup() {
   lcd.clear();
   lcd.print("C4 Prop Init v");
   lcd.print(FW_VERSION);
-  delay(1000);
+  delay(1500);
+
+  // --- CREDITS SCREEN ---
+  lcd.clear();
+  centerPrintC("Designed by", 0);
+  centerPrintC("Andrew Florio", 1);
+  centerPrintC("thebassplayer127", 2);
+  centerPrintC("@gmail.com", 3);
+  delay(2000);
 
   // Bring up network unless disabled
   beginNetwork(wifiOverrideDisabledThisBoot);

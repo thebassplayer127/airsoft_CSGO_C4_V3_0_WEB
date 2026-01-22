@@ -1,5 +1,5 @@
 // Config.h
-// VERSION: 4.1.0
+// VERSION: 4.1.1
 // FIXED: Buzzer Frequency set to 2400Hz (Resonant Peak for 12085 Buzzer)
 
 #pragma once
@@ -7,7 +7,7 @@
 #include <EEPROM.h>
 
 // Version
-static const char* FW_VERSION = "4.1.0";
+static const char* FW_VERSION = "4.1.1";
 
 // EEPROM / Settings
 #define EEPROM_SIZE 512
