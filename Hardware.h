@@ -32,7 +32,7 @@ extern Keypad keypad;
 
 // Audio Cooldown Vars
 static uint32_t lastAudioCmdTime = 0;
-static const uint32_t AUDIO_COOLDOWN_MS = 175; 
+static const uint32_t AUDIO_COOLDOWN_MS = 200; 
 
 // --- BUZZER CONFIG ---
 static const int BEEP_LEDC_CH = 4;

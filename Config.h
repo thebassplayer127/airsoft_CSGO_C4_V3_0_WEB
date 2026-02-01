@@ -1,19 +1,22 @@
 // Config.h
-// VERSION: 4.1.1
-// FIXED: Buzzer Frequency set to 2400Hz (Resonant Peak for 12085 Buzzer)
+// VERSION: 5.0.1
+// DATE: 2026-02-01
+// UPDATE: Added Fixed Code, Expanded RFID (30), Arming Cards, Homing Ping
 
 #pragma once
 #include <Arduino.h>
 #include <EEPROM.h>
 
 // Version
-static const char* FW_VERSION = "4.1.1";
+static const char* FW_VERSION = "5.0.1";
 
 // EEPROM / Settings
 #define EEPROM_SIZE 512
-#define MAX_RFID_UIDS 10
-#define SETTINGS_MAGIC    0xC4C40205 
-#define SETTINGS_VERSION  5          
+// Expanded to 30. Struct size is 12 bytes. 30*12 = 360 bytes.
+// Settings overhead ~60 bytes. Total ~420/512. Safe.
+#define MAX_RFID_UIDS 30
+#define SETTINGS_MAGIC    0xC4C40206 // Bumped magic for structure change
+#define SETTINGS_VERSION  6          
 
 struct Settings {
   uint32_t magic_number;
@@ -30,6 +33,10 @@ struct Settings {
   uint8_t  dud_enabled;        // 0=Off, 1=On
   uint8_t  dud_chance;         // 1-100%
   
+  // --- FIXED CODE ---
+  uint8_t  fixed_code_enabled; // 0=Any 7 digits, 1=Must match fixed_code_val
+  char     fixed_code_val[8];  // The required code
+
   // --- HARDWARE ---
   uint8_t  servo_enabled;           // 0=Off, 1=On
   uint8_t  servo_start_angle;       // e.g., 0
@@ -43,23 +50,30 @@ struct Settings {
   uint8_t  plant_sensor_enabled;    // 0=Off, 1=On
   uint8_t  easter_eggs_enabled;     // 0=Off, 1=On
   uint8_t  explosion_strobe_enabled;// 0=Off, 1=On
+  
+  // --- HOMING PING ---
+  uint8_t  ping_enabled;            // 0=Off, 1=On
+  uint16_t ping_interval_s;         // Seconds between pings
+  uint8_t  ping_light_enabled;      // Flash LED with ping?
 
-  // RFID
+  // --- RFID ---
   int32_t  num_rfid_uids;
   struct TagUID {
     uint8_t len;
     uint8_t bytes[10];
-    uint8_t _pad;
+    uint8_t type; // 0=Disarm (Default), 1=Arming Card
   } rfid_uids[MAX_RFID_UIDS];
+  
+  // RFID Arming Logic
+  uint8_t  rfid_arming_mode;    // 0=Use Fixed Code, 1=Random Code
+  uint16_t rfid_entry_speed_ms; // Delay between digits (0=Instant)
 
   // Network
   uint8_t  wifi_enabled;
   uint8_t  net_use_mdns;
-  uint8_t  _pad1[2];
   uint32_t scoreboard_ip;
   uint32_t master_ip;
   uint16_t scoreboard_port;
-  uint16_t _pad2;
 };
 
 extern Settings settings;
@@ -73,7 +87,6 @@ static constexpr uint32_t RANDOM_DIGIT_UPDATE_MS  = 150;
 static constexpr uint32_t EASTER_EGG_CYCLE_MS     = 100;
 
 // Audio / Visual
-// FIXED: Updated to 2400Hz to match 12085 Buzzer resonance
 static constexpr int      BEEP_TONE_FREQ          = 2400; 
 static constexpr uint32_t BEEP_TONE_DURATION_MS   = 225;
 static constexpr int      NEOPIXEL_BRIGHTNESS     = 255;
@@ -94,6 +107,10 @@ inline void factoryResetSettings() {
   settings.dud_enabled             = 0; 
   settings.dud_chance              = 5; 
   
+  // Fixed Code
+  settings.fixed_code_enabled      = 0;
+  strcpy(settings.fixed_code_val, "7355608"); // Default CS Code
+
   // Audio Defaults 
   settings.sound_enabled           = 1;
   settings.sound_volume            = 20;
@@ -107,9 +124,17 @@ inline void factoryResetSettings() {
   // Extras
   settings.easter_eggs_enabled     = 1; 
   settings.explosion_strobe_enabled= 1; 
+
+  // Ping
+  settings.ping_enabled            = 0;
+  settings.ping_interval_s         = 30;
+  settings.ping_light_enabled      = 1;
   
   // Network Defaults 
   settings.num_rfid_uids           = 0;
+  settings.rfid_arming_mode        = 0;   // 0=Fixed
+  settings.rfid_entry_speed_ms     = 150; // Moderate typing speed
+  
   settings.wifi_enabled            = 0; 
   settings.net_use_mdns            = 1;
   settings.scoreboard_ip           = (192u<<24) | (168u<<16) | (0u<<8) | 100u;

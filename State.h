@@ -1,6 +1,7 @@
 // State.h
-// VERSION: 6.0.1
-// FIXED: Enum name consistency (MENU_HARDWARE_SUBMENU)
+// VERSION: 6.5.0
+// FIXED: Auto-Typing persistence during state change (IDLE->ARMING)
+// ADDED: Menu state for deleting specific RFID cards
 
 #pragma once
 #include "Config.h"
@@ -23,6 +24,11 @@ extern bool easterEggActive;
 extern bool servoTriggeredThisExplosion; 
 extern uint32_t stored_duration_ram;
 
+// For RFID Auto-Typing
+extern bool autoTypingActive;
+extern char autoTypingTarget[CODE_LENGTH + 1];
+extern uint32_t lastAutoTypeTime;
+
 // Game states
 enum PropState { 
   STANDBY, AWAIT_ARM_TOGGLE, PROP_IDLE, ARMING, ARMED, DISARMING_KEYPAD, 
@@ -39,24 +45,34 @@ enum ConfigState {
   MENU_SET_BOMB_TIME, MENU_SET_MANUAL_TIME, MENU_SET_RFID_TIME,
   MENU_SUDDEN_DEATH_TOGGLE, MENU_DUD_SETTINGS, MENU_DUD_CHANCE,
   
-  // Renamed from EXTRAS to HARDWARE to avoid confusion
+  // FIXED CODE MENUS
+  MENU_FIXED_CODE_SETTINGS, MENU_FIXED_CODE_TOGGLE, MENU_SET_FIXED_CODE,
+
   MENU_HARDWARE_SUBMENU, 
-  
-  // Audio Submenu
   MENU_AUDIO_SUBMENU, MENU_AUDIO_TOGGLE, MENU_VOLUME,
 
   // Hardware/FX
   MENU_PLANT_SENSOR_TOGGLE,
   
-  // FX Submenu (Strobe/Eggs)
-  MENU_EXTRAS_SUBMENU, // Kept this name for the "FX/Xtras" screen logic 
+  // FX Submenu (Strobe/Eggs/Ping)
+  MENU_EXTRAS_SUBMENU, 
   MENU_TOGGLE_EASTER_EGGS, MENU_TOGGLE_STROBE,
+  
+  // PING MENU
+  MENU_PING_SETTINGS, MENU_PING_TOGGLE, MENU_PING_INTERVAL, MENU_PING_LIGHT_TOGGLE,
   
   // Servo
   MENU_SERVO_SETTINGS, MENU_SERVO_TOGGLE, MENU_SERVO_START_ANGLE, MENU_SERVO_END_ANGLE,
 
   // RFID & Network
-  MENU_VIEW_RFIDS, MENU_ADD_RFID, MENU_CLEAR_RFIDS_CONFIRM, 
+  MENU_VIEW_RFIDS, 
+  MENU_ADD_RFID_SELECT_TYPE, // Ask Arm vs Disarm
+  MENU_ADD_RFID_WAIT,        // Scan card
+  MENU_DELETE_RFID_CONFIRM,  // NEW: Confirm deletion of single card
+  MENU_CLEAR_RFIDS_CONFIRM, 
+  MENU_RFID_ADV_SETTINGS,    // Arming speed/mode
+  MENU_RFID_ARMING_MODE, MENU_RFID_ENTRY_SPEED,
+
   MENU_NET_FORGET_CONFIRM, MENU_SAVE_EXIT, MENU_EXIT_NO_SAVE,
   MENU_NETWORK, MENU_NET_ENABLE, MENU_NET_SERVER_MODE, MENU_NET_IP, MENU_NET_PORT, MENU_NET_MASTER_IP,
   MENU_NET_WIFI_SETUP, MENU_NET_SAVE_BACK, MENU_NETWORK_2, MENU_NET_APPLY_NOW
@@ -116,6 +132,7 @@ inline void resetSpecialModes() {
   bondModeActive = false;
   suddenDeathActive = false;
   easterEggActive = false; 
+  autoTypingActive = false;
   
   if (stored_duration_ram > 0) {
       settings.bomb_duration_ms = stored_duration_ram;
@@ -131,7 +148,14 @@ inline void setState(PropState newState) {
   displayNeedsUpdate = true;
   netNotifyState(getStateName(newState));
 
+  // Clear code on state change
   enteredCode[0] = '\0';
+  
+  // FIX: Protect Auto-Typing during IDLE -> ARMING transition
+  // If we don't protect it, setState kills the flag immediately after the first digit is typed.
+  if ( ! (oldState == PROP_IDLE && newState == ARMING) ) {
+      autoTypingActive = false; 
+  }
   
   if (newState == STANDBY || newState == PROP_IDLE || newState == AWAIT_ARM_TOGGLE) {
     resetSpecialModes();

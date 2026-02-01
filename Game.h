@@ -1,10 +1,7 @@
 // Game.h
-// VERSION: 6.3.0
-// OPTIMIZED: Beep curve calculation throttled to 100ms
-// ADDED: Safety Clamp to beep interval to prevent math glitches at end of timer
-// FIXED: Suppressed audio in Volume Menu
-// FIXED: Allow "501" to disarm in Star Wars mode
-// FIXED: OTA update support
+// VERSION: 6.5.0
+// UPDATE: Added Delete Logic for individual RFID cards
+// FIXED: Auto-Typing persistence logic is now in State.h
 
 #pragma once
 #include <Arduino.h>
@@ -23,6 +20,12 @@ bool terminatorModeActive = false;
 bool bondModeActive = false;
 bool suddenDeathActive = false;
 bool easterEggActive = false; 
+
+// Auto Typing Globals
+bool autoTypingActive = false;
+char autoTypingTarget[CODE_LENGTH + 1];
+uint32_t lastAutoTypeTime = 0;
+uint32_t lastPingTime = 0; // For homing ping
 
 // Cache for unsaved RAM settings
 uint32_t stored_duration_ram = 0;
@@ -71,40 +74,70 @@ inline void handleArmSwitch() {
       setState(STANDBY);
     }
   } else if (armSwitch.fell()) {
-    if (currentState == STANDBY) setState(PROP_IDLE);
+    if (currentState == STANDBY) {
+        lastPingTime = millis(); // Reset ping timer
+        setState(PROP_IDLE);
+    }
   }
+}
+
+inline void processArmingCode(const char* code) {
+    bool ee = settings.easter_eggs_enabled;
+    // ... check for special codes first ...
+    if (ee && strcmp(code, "501") == 0) { setState(STARWARS_PRE_GAME); enteredCode[0] = '\0'; return; }
+    if (ee && strcmp(code, "1138") == 0) { strcpy(activeArmCode, code); bombArmedTimestamp = millis(); safePlay(SOUND_THX); c4OnEnterArmed(); setState(ARMED); return; }
+    if (ee && strcmp(code, "8675309") == 0) { strcpy(activeArmCode, code); stored_duration_ram = settings.bomb_duration_ms; settings.bomb_duration_ms = 222000; bombArmedTimestamp = millis(); safePlay(SOUND_JENNY); c4OnEnterArmed(); setState(ARMED); return; }
+    if (ee && strcmp(code, "3141592") == 0) { strcpy(activeArmCode, code); bombArmedTimestamp = millis(); safePlay(SOUND_NERD); c4OnEnterArmed(); setState(ARMED); return; }
+    if (ee && strcmp(code, "1984") == 0) { terminatorModeActive = true; strcpy(activeArmCode, code); bombArmedTimestamp = millis(); safePlay(SOUND_HASTA_2); c4OnEnterArmed(); setState(ARMED); return; }
+    if (ee && strcmp(code, "7777777") == 0) { strcpy(activeArmCode, code); bombArmedTimestamp = millis(); safePlay(SOUND_JACKPOT); c4OnEnterArmed(); setState(ARMED); return; }
+    if (ee && strcmp(code, "007") == 0) { bondModeActive = true; strcpy(activeArmCode, code); stored_duration_ram = settings.bomb_duration_ms; settings.bomb_duration_ms = 105000; bombArmedTimestamp = millis(); safePlay(SOUND_BOND_INTRO); c4OnEnterArmed(); setState(ARMED); return; }
+    if (ee && strcmp(code, "12345") == 0) { centerPrintC("IDIOT LUGGAGE?", 1); safePlay(SOUND_SPACEBALLS); delay(2500); enteredCode[0] = '\0'; setState(PROP_IDLE); return; }
+    if (ee && strcmp(code, "0451") == 0) { strcpy(activeArmCode, code); bombArmedTimestamp = millis(); safePlay(SOUND_SOM_BITCH); c4OnEnterArmed(); setState(ARMED); return; }
+    if (ee && strcmp(code, "14085") == 0) { strcpy(activeArmCode, code); bombArmedTimestamp = millis(); safePlay(SOUND_MGS_ALERT); c4OnEnterArmed(); setState(ARMED); return; }
+    if (ee && strcmp(code, "0000000") == 0) { centerPrintC("TOO EASY", 1); safePlay(SOUND_LAME); delay(1500); enteredCode[0] = '\0'; setState(PROP_IDLE); return; }
+    if (ee && strcmp(code, "666666") == 0) { doomModeActive = true; strcpy(activeArmCode, code); bombArmedTimestamp = millis(); safePlay(SOUND_DOOM_SLAYER); setState(ARMED); return; }
+    if (ee && strcmp(code, "5318008") == 0) { strcpy(activeArmCode, code); setState(EASTER_EGG_2); return; }
+    if (strcmp(code, "999") == 0) { centerPrintC("SERVO TEST", 1); centerPrintC("ACTIVATED", 2); startShellEjectorSequence(); enteredCode[0] = '\0'; return; }
+    if (strcmp(code, MASTER_CODE) == 0) { strcpy(activeArmCode, code); setState(EASTER_EGG); return; }
+
+    // Standard Arming
+    if ((int)strlen(code) == CODE_LENGTH) {
+        // FIXED CODE CHECK
+        if (settings.fixed_code_enabled) {
+            if (strcmp(code, settings.fixed_code_val) != 0) {
+                // Wrong code
+                centerPrintC("INVALID CODE", 1);
+                safePlay(SOUND_MENU_CANCEL);
+                delay(1000);
+                enteredCode[0] = '\0';
+                setState(PROP_IDLE);
+                return;
+            }
+        }
+
+        strcpy(activeArmCode, code);
+        bombArmedTimestamp = millis();
+        safePlay(SOUND_BOMB_PLANTED);
+        c4OnEnterArmed();
+        setState(ARMED);
+    } else {
+        setState(PROP_IDLE);
+    }
 }
 
 inline void handleKeypadInput(char key) {
   if (!key) return;
 
   if (currentState == STARWARS_PRE_GAME) {
-     if (isdigit(key)) {
-        safePlay(random(SOUND_SWING_START, SOUND_SWING_END + 1));
-     }
+     if (isdigit(key)) safePlay(random(SOUND_SWING_START, SOUND_SWING_END + 1));
      if (key == '#') {
-        if (!isBombPlanted()) {
-           centerPrintC("ERROR: MUST PLANT", 1);
-           safePlay(SOUND_MENU_CANCEL);
-           delay(2000); 
-           return; 
-        }
+        if (!isBombPlanted()) { centerPrintC("ERROR: MUST PLANT", 1); safePlay(SOUND_MENU_CANCEL); delay(2000); return; }
         strcpy(activeArmCode, MASTER_CODE); 
-        stored_duration_ram = settings.bomb_duration_ms;
-        settings.bomb_duration_ms = 350000; 
-
-        starWarsModeActive = true;
-        bombArmedTimestamp = millis();
-        safePlay(SOUND_STAR_WARS_THEME); 
-        c4OnEnterArmed(); 
-        setState(ARMED);
+        stored_duration_ram = settings.bomb_duration_ms; settings.bomb_duration_ms = 350000; 
+        starWarsModeActive = true; bombArmedTimestamp = millis(); safePlay(SOUND_STAR_WARS_THEME); c4OnEnterArmed(); setState(ARMED);
         return;
      }
-     if (key == '*') {
-        resetSpecialModes();
-        setState(PROP_IDLE);
-        return;
-     }
+     if (key == '*') { resetSpecialModes(); setState(PROP_IDLE); return; }
      return; 
   }
 
@@ -117,6 +150,7 @@ inline void handleKeypadInput(char key) {
       int len = strlen(enteredCode);
       enteredCode[len] = key;
       enteredCode[len + 1] = '\0';
+      safePlay(SOUND_KEY_PRESS);
     }
     
     if (currentState == DISARMING_KEYPAD) {
@@ -125,9 +159,7 @@ inline void handleKeypadInput(char key) {
       else if (strcmp(enteredCode, MASTER_CODE) == 0) matched = true;
       else if (starWarsModeActive && strcmp(enteredCode, "501") == 0) matched = true;
 
-      if (matched) {
-        setState(DISARMED);
-      } 
+      if (matched) setState(DISARMED);
       else if ((int)strlen(enteredCode) >= CODE_LENGTH) {
         uint32_t elapsed = millis() - bombArmedTimestamp;
         uint32_t total   = settings.bomb_duration_ms;
@@ -153,110 +185,11 @@ inline void handleKeypadInput(char key) {
   } else if (key == '#') {
     if (currentState == ARMING) {
       if (!isBombPlanted()) {
-         centerPrintC("ERROR: MUST PLANT", 1);
-         centerPrintC("ON SITE FIRST!", 2);
-         safePlay(SOUND_MENU_CANCEL);
-         delay(2000); 
-         setState(PROP_IDLE);
+         centerPrintC("ERROR: MUST PLANT", 1); centerPrintC("ON SITE FIRST!", 2);
+         safePlay(SOUND_MENU_CANCEL); delay(2000); setState(PROP_IDLE);
          return; 
       }
-
-      resetSpecialModes();
-      bool ee = settings.easter_eggs_enabled;
-
-      if (ee && strcmp(enteredCode, "501") == 0) {
-         setState(STARWARS_PRE_GAME);
-         enteredCode[0] = '\0'; 
-      } else if (ee && strcmp(enteredCode, "1138") == 0) { 
-         strcpy(activeArmCode, enteredCode);
-         bombArmedTimestamp = millis();
-         safePlay(SOUND_THX); 
-         c4OnEnterArmed(); setState(ARMED);
-      } else if (ee && strcmp(enteredCode, "8675309") == 0) {
-         strcpy(activeArmCode, enteredCode);
-         stored_duration_ram = settings.bomb_duration_ms;
-         settings.bomb_duration_ms = 222000;
-         bombArmedTimestamp = millis();
-         safePlay(SOUND_JENNY); 
-         c4OnEnterArmed(); setState(ARMED);
-      } else if (ee && strcmp(enteredCode, "3141592") == 0) {
-         strcpy(activeArmCode, enteredCode);
-         bombArmedTimestamp = millis();
-         safePlay(SOUND_NERD); 
-         c4OnEnterArmed(); setState(ARMED);
-      } else if (ee && strcmp(enteredCode, "1984") == 0) {
-         terminatorModeActive = true;
-         strcpy(activeArmCode, enteredCode);
-         bombArmedTimestamp = millis();
-         safePlay(SOUND_HASTA_2); 
-         c4OnEnterArmed(); setState(ARMED);
-      } else if (ee && strcmp(enteredCode, "7777777") == 0) {
-         strcpy(activeArmCode, enteredCode);
-         bombArmedTimestamp = millis();
-         safePlay(SOUND_JACKPOT); 
-         c4OnEnterArmed(); setState(ARMED);
-      } else if (ee && strcmp(enteredCode, "007") == 0) {
-         bondModeActive = true;
-         strcpy(activeArmCode, enteredCode);
-         stored_duration_ram = settings.bomb_duration_ms;
-         settings.bomb_duration_ms = 105000;
-         bombArmedTimestamp = millis();
-         safePlay(SOUND_BOND_INTRO); 
-         c4OnEnterArmed(); setState(ARMED);
-      } else if (ee && strcmp(enteredCode, "12345") == 0) {
-         centerPrintC("IDIOT LUGGAGE?", 1);
-         safePlay(SOUND_SPACEBALLS);
-         delay(2500);
-         enteredCode[0] = '\0';
-         setState(PROP_IDLE);
-      } else if (ee && strcmp(enteredCode, "0451") == 0) {
-         strcpy(activeArmCode, enteredCode);
-         bombArmedTimestamp = millis();
-         safePlay(SOUND_SOM_BITCH); 
-         c4OnEnterArmed(); setState(ARMED);
-      } else if (ee && strcmp(enteredCode, "14085") == 0) {
-         strcpy(activeArmCode, enteredCode);
-         bombArmedTimestamp = millis();
-         safePlay(SOUND_MGS_ALERT);
-         c4OnEnterArmed(); setState(ARMED);
-      } else if (ee && strcmp(enteredCode, "0000000") == 0) {
-         centerPrintC("TOO EASY", 1);
-         safePlay(SOUND_LAME);
-         delay(1500);
-         enteredCode[0] = '\0';
-         setState(PROP_IDLE);
-      } else if (ee && strcmp(enteredCode, "666666") == 0) { 
-         doomModeActive = true;
-         strcpy(activeArmCode, enteredCode);
-         bombArmedTimestamp = millis();
-         safePlay(SOUND_DOOM_SLAYER); 
-         setState(ARMED);
-      } else if (ee && strcmp(enteredCode, "5318008") == 0) {
-          strcpy(activeArmCode, enteredCode);
-          setState(EASTER_EGG_2);
-
-      } else if (strcmp(enteredCode, "999") == 0) {
-          centerPrintC("SERVO TEST", 1);
-          centerPrintC("ACTIVATED", 2);
-          Serial.println("[GAME] Manual Servo Test Triggered via 999#");
-          startShellEjectorSequence();
-          enteredCode[0] = '\0';
-          return;
-
-      } else if (strcmp(enteredCode, MASTER_CODE) == 0) {
-          strcpy(activeArmCode, enteredCode);
-          setState(EASTER_EGG); 
-
-      } else if ((int)strlen(enteredCode) == CODE_LENGTH) {
-        strcpy(activeArmCode, enteredCode);
-        bombArmedTimestamp = millis();
-        safePlay(SOUND_BOMB_PLANTED);
-        c4OnEnterArmed();
-        setState(ARMED);
-        
-      } else {
-        setState(PROP_IDLE);
-      }
+      processArmingCode(enteredCode);
     }
   }
 }
@@ -280,24 +213,56 @@ inline void handleRfid() {
       safePlay(SOUND_MENU_CONFIRM);
       resetSpecialModes();
       setState(STANDBY); 
-      rfid.PICC_HaltA();
-      rfid.PCD_StopCrypto1();
+      rfid.PICC_HaltA(); rfid.PCD_StopCrypto1();
       return;
   }
 
-  bool isAuthorized = false;
+  // Find tag in database
+  int foundIndex = -1;
   for (int i = 0; i < settings.num_rfid_uids; i++) {
     if (UIDUtil::equals_len_bytes(settings.rfid_uids[i].len,
                                   settings.rfid_uids[i].bytes,
                                   rfid.uid.uidByte, rfid.uid.size)) {
-      isAuthorized = true; break;
+      foundIndex = i; break;
     }
   }
 
-  if (isAuthorized && (currentState == ARMED || currentState == DISARMING_KEYPAD)) {
-    setState(DISARMING_RFID);
+  if (foundIndex != -1) {
+    uint8_t type = settings.rfid_uids[foundIndex].type;
+
+    // CASE 1: DISARMING CARD (Type 0)
+    if (type == 0) {
+        if (currentState == ARMED || currentState == DISARMING_KEYPAD) {
+           setState(DISARMING_RFID);
+        }
+    }
+    // CASE 2: ARMING CARD (Type 1)
+    else if (type == 1) {
+        if (currentState == PROP_IDLE || currentState == ARMING) {
+            if (!isBombPlanted()) {
+                safePlay(SOUND_MENU_CANCEL);
+            } else {
+                safePlay(SOUND_KEY_PRESS);
+                // Trigger Auto-Typing
+                autoTypingActive = true;
+                enteredCode[0] = '\0'; // Clear buffer
+                lastAutoTypeTime = millis();
+                
+                // Determine target code
+                if (settings.rfid_arming_mode == 0) {
+                    // Fixed Code
+                    if (settings.fixed_code_enabled) strcpy(autoTypingTarget, settings.fixed_code_val);
+                    else strcpy(autoTypingTarget, "7355608");
+                } else {
+                    // Random Code
+                    for(int k=0; k<7; k++) autoTypingTarget[k] = (char)random('0', '9'+1);
+                    autoTypingTarget[7] = '\0';
+                }
+            }
+        }
+    }
   }
-  else if (!isAuthorized) {
+  else {
     safePlay(SOUND_INVALID_CARD);
   }
 
@@ -306,69 +271,42 @@ inline void handleRfid() {
 }
 
 inline void handleBeepLogic() {
-  // --- Robust Beep State Machine ---
-  
   static uint32_t lastCurveCalc = 0;
   static uint32_t cachedInterval = 1000;
   static uint32_t cachedBeepDuration = BEEP_TONE_DURATION_MS;
 
-  // Optimize: Recalculate curve every 100ms
   if (millis() - lastCurveCalc > 100) {
       uint32_t elapsed = millis() - bombArmedTimestamp;
       if (elapsed > settings.bomb_duration_ms) elapsed = settings.bomb_duration_ms;
-
       float progress = (float)elapsed / (float)settings.bomb_duration_ms;
       float virtual_t = progress * 45.0f; 
-
       float bps = 1.05f * powf(1.039f, virtual_t);
       cachedInterval = (uint32_t)(1000.0f / bps);
-      
-      // Safety Clamp: Don't let interval drop below 50ms to prevent glitches
       if (cachedInterval < 50) cachedInterval = 50;
-
-      if (cachedInterval < (BEEP_TONE_DURATION_MS * 2)) {
-         cachedBeepDuration = cachedInterval / 2;
-      } else {
-         cachedBeepDuration = BEEP_TONE_DURATION_MS;
-      }
+      if (cachedInterval < (BEEP_TONE_DURATION_MS * 2)) cachedBeepDuration = cachedInterval / 2;
+      else cachedBeepDuration = BEEP_TONE_DURATION_MS;
       lastCurveCalc = millis();
   }
 
-  // --- Cycle Calculation ---
   uint32_t delta = millis() - lastBeepTimestamp;
-  if (delta >= cachedInterval) {
-     lastBeepTimestamp = millis();
-     delta = 0;
-  }
+  if (delta >= cachedInterval) { lastBeepTimestamp = millis(); delta = 0; }
 
   static bool isBeeping = false;
-  
   if (delta < cachedBeepDuration) {
-     if (!isBeeping) {
-        beepStart(BEEP_TONE_FREQ);
-        ledIsOn = true;
-        isBeeping = true;
-     }
+     if (!isBeeping) { beepStart(BEEP_TONE_FREQ); ledIsOn = true; isBeeping = true; }
   } else {
-     if (isBeeping) {
-        beepStop();
-        ledIsOn = false;
-        isBeeping = false;
-     }
+     if (isBeeping) { beepStop(); ledIsOn = false; isBeeping = false; }
   }
 }
 
 inline void handleConfigMode(char key) {
   if (key) {
     displayNeedsUpdate = true;
-    
-    if (currentConfigState != MENU_VOLUME) {
-        safePlay(SOUND_KEY_PRESS); 
-    }
+    if (currentConfigState != MENU_VOLUME) safePlay(SOUND_KEY_PRESS);
 
     switch(currentConfigState) {
       case MENU_MAIN: {
-        const int N = 10;
+        const int N = 11;
         if (key == '2') configMenuIndex = (configMenuIndex - 1 + N) % N;
         if (key == '8') configMenuIndex = (configMenuIndex + 1) % N;
         if (key == '#') {
@@ -378,12 +316,13 @@ inline void handleConfigMode(char key) {
             case 0: currentConfigState = MENU_SET_BOMB_TIME; break;
             case 1: currentConfigState = MENU_SET_MANUAL_TIME; break;
             case 2: currentConfigState = MENU_SET_RFID_TIME; break;
-            case 3: currentConfigState = MENU_SUDDEN_DEATH_TOGGLE; break;
-            case 4: currentConfigState = MENU_DUD_SETTINGS; break;
-            case 5: rfidViewIndex = 0; currentConfigState = MENU_VIEW_RFIDS; break;
-            case 6: currentConfigState = MENU_HARDWARE_SUBMENU; break; 
-            case 7: currentConfigState = MENU_NETWORK; break;
-            case 8: {
+            case 3: currentConfigState = MENU_FIXED_CODE_SETTINGS; break; // NEW
+            case 4: currentConfigState = MENU_SUDDEN_DEATH_TOGGLE; break;
+            case 5: currentConfigState = MENU_DUD_SETTINGS; break;
+            case 6: rfidViewIndex = 0; currentConfigState = MENU_VIEW_RFIDS; break;
+            case 7: currentConfigState = MENU_HARDWARE_SUBMENU; break; 
+            case 8: currentConfigState = MENU_NETWORK; break;
+            case 9: { // SAVE EXIT
               Serial.println("[CFG] Save Exit");
               currentConfigState = MENU_SAVE_EXIT;
               displayNeedsUpdate = true;
@@ -392,13 +331,11 @@ inline void handleConfigMode(char key) {
               delay(100); 
               requestRestart(600);
             } break;
-            case 9: {
+            case 10: { // EXIT
               currentConfigState = MENU_EXIT_NO_SAVE;
               displayNeedsUpdate = true;
               safePlay(SOUND_MENU_CANCEL);
-              delay(500); 
-              configInputBuffer[0]='\0';
-              setState(STANDBY);
+              delay(500); configInputBuffer[0]='\0'; setState(STANDBY);
             } break;
           }
         }
@@ -413,8 +350,7 @@ inline void handleConfigMode(char key) {
         }
         if (key == '*') {
           size_t len = strlen(configInputBuffer);
-          if (len) configInputBuffer[len-1] = '\0';
-          else currentConfigState = MENU_MAIN;
+          if (len) configInputBuffer[len-1] = '\0'; else currentConfigState = MENU_MAIN;
         }
         if (key == '#') {
           unsigned long v = strtoul(configInputBuffer, nullptr, 10);
@@ -425,6 +361,36 @@ inline void handleConfigMode(char key) {
             safePlay(SOUND_MENU_CONFIRM);
           } else safePlay(SOUND_MENU_CANCEL);
           currentConfigState = MENU_MAIN;
+        }
+      } break;
+
+      // --- FIXED CODE ---
+      case MENU_FIXED_CODE_SETTINGS: {
+        if (key == '1') currentConfigState = MENU_FIXED_CODE_TOGGLE;
+        if (key == '2') { configInputBuffer[0] = '\0'; currentConfigState = MENU_SET_FIXED_CODE; }
+        if (key == '*') currentConfigState = MENU_MAIN;
+      } break;
+      case MENU_FIXED_CODE_TOGGLE: {
+        if (key == '#') { settings.fixed_code_enabled = !settings.fixed_code_enabled; safePlay(SOUND_MENU_CONFIRM); }
+        if (key == '*') currentConfigState = MENU_FIXED_CODE_SETTINGS;
+      } break;
+      case MENU_SET_FIXED_CODE: {
+        if (isdigit(key)) {
+            size_t len = strlen(configInputBuffer);
+            if (len < 7) { configInputBuffer[len] = key; configInputBuffer[len+1] = '\0'; }
+        }
+        if (key == '*') {
+            size_t len = strlen(configInputBuffer);
+            if (len > 0) configInputBuffer[len-1] = '\0';
+            else currentConfigState = MENU_FIXED_CODE_SETTINGS;
+        }
+        if (key == '#') {
+            size_t len = strlen(configInputBuffer);
+            if (len > 0) {
+               strcpy(settings.fixed_code_val, configInputBuffer);
+               safePlay(SOUND_MENU_CONFIRM);
+            } else safePlay(SOUND_MENU_CANCEL);
+            currentConfigState = MENU_FIXED_CODE_SETTINGS;
         }
       } break;
 
@@ -446,22 +412,16 @@ inline void handleConfigMode(char key) {
         }
         if (key == '*') {
             size_t len = strlen(configInputBuffer);
-            if (len > 0) configInputBuffer[len-1] = '\0';
-            else currentConfigState = MENU_DUD_SETTINGS;
+            if (len > 0) configInputBuffer[len-1] = '\0'; else currentConfigState = MENU_DUD_SETTINGS;
         }
         if (key == '#') {
           int val = atoi(configInputBuffer);
-          if (val >= 0 && val <= 100) { 
-            settings.dud_chance = val; 
-            safePlay(SOUND_MENU_CONFIRM); 
-          } else {
-            safePlay(SOUND_MENU_CANCEL);
-          }
+          if (val >= 0 && val <= 100) { settings.dud_chance = val; safePlay(SOUND_MENU_CONFIRM); } 
+          else safePlay(SOUND_MENU_CANCEL);
           currentConfigState = MENU_DUD_SETTINGS;
         }
       } break;
 
-      // --- HARDWARE / AUDIO SUBMENU ---
       case MENU_HARDWARE_SUBMENU: {
         if (key == '1') currentConfigState = MENU_AUDIO_SUBMENU;
         if (key == '2') currentConfigState = MENU_SERVO_SETTINGS;
@@ -470,7 +430,6 @@ inline void handleConfigMode(char key) {
         if (key == '*') currentConfigState = MENU_MAIN;
       } break;
 
-      // --- AUDIO SUBMENU ---
       case MENU_AUDIO_SUBMENU: {
          if (key == '1') currentConfigState = MENU_AUDIO_TOGGLE;
          if (key == '2') { configInputBuffer[0]='\0'; currentConfigState = MENU_VOLUME; }
@@ -489,15 +448,11 @@ inline void handleConfigMode(char key) {
          }
          if (key == '*') {
             size_t len = strlen(configInputBuffer);
-            if (len > 0) configInputBuffer[len-1] = '\0';
-            else currentConfigState = MENU_AUDIO_SUBMENU;
+            if (len > 0) configInputBuffer[len-1] = '\0'; else currentConfigState = MENU_AUDIO_SUBMENU;
          }
          if (key == '#') {
             int val = atoi(configInputBuffer);
-            if (val >= 0 && val <= 30) { 
-                settings.sound_volume = val; 
-                myDFPlayer.volume(val); 
-            }
+            if (val >= 0 && val <= 30) { settings.sound_volume = val; myDFPlayer.volume(val); }
             currentConfigState = MENU_AUDIO_SUBMENU;
          }
       } break;
@@ -510,7 +465,40 @@ inline void handleConfigMode(char key) {
       case MENU_EXTRAS_SUBMENU: {
         if (key == '1') currentConfigState = MENU_TOGGLE_STROBE;
         if (key == '2') currentConfigState = MENU_TOGGLE_EASTER_EGGS;
+        if (key == '3') currentConfigState = MENU_PING_SETTINGS;
         if (key == '*') currentConfigState = MENU_HARDWARE_SUBMENU;
+      } break;
+      
+      // PING SETTINGS
+      case MENU_PING_SETTINGS: {
+        if (key == '1') currentConfigState = MENU_PING_TOGGLE;
+        if (key == '2') { configInputBuffer[0]='\0'; currentConfigState = MENU_PING_INTERVAL; }
+        if (key == '3') currentConfigState = MENU_PING_LIGHT_TOGGLE;
+        if (key == '*') currentConfigState = MENU_EXTRAS_SUBMENU;
+      } break;
+      case MENU_PING_TOGGLE: {
+        if (key == '#') { settings.ping_enabled = !settings.ping_enabled; safePlay(SOUND_MENU_CONFIRM); }
+        if (key == '*') currentConfigState = MENU_PING_SETTINGS;
+      } break;
+      case MENU_PING_INTERVAL: {
+        if (isdigit(key)) {
+            size_t len = strlen(configInputBuffer);
+            if (len + 1 < CONFIG_INPUT_MAX) { configInputBuffer[len] = key; configInputBuffer[len+1] = '\0'; }
+        }
+        if (key == '*') {
+            size_t len = strlen(configInputBuffer);
+            if (len > 0) configInputBuffer[len-1] = '\0'; else currentConfigState = MENU_PING_SETTINGS;
+        }
+        if (key == '#') {
+           int val = atoi(configInputBuffer);
+           if (val >= 5 && val <= 3600) { settings.ping_interval_s = val; safePlay(SOUND_MENU_CONFIRM); }
+           else safePlay(SOUND_MENU_CANCEL);
+           currentConfigState = MENU_PING_SETTINGS;
+        }
+      } break;
+      case MENU_PING_LIGHT_TOGGLE: {
+        if (key == '#') { settings.ping_light_enabled = !settings.ping_light_enabled; safePlay(SOUND_MENU_CONFIRM); }
+        if (key == '*') currentConfigState = MENU_PING_SETTINGS;
       } break;
 
       case MENU_SERVO_SETTINGS: {
@@ -532,17 +520,12 @@ inline void handleConfigMode(char key) {
         }
         if (key == '*') {
             size_t len = strlen(configInputBuffer);
-            if (len > 0) configInputBuffer[len-1] = '\0';
-            else currentConfigState = MENU_SERVO_SETTINGS;
+            if (len > 0) configInputBuffer[len-1] = '\0'; else currentConfigState = MENU_SERVO_SETTINGS;
         }
         if (key == '#') {
             int val = atoi(configInputBuffer);
-            if (val >= 0 && val <= 180) { 
-              settings.servo_start_angle = val; 
-              safePlay(SOUND_MENU_CONFIRM); 
-            } else {
-              safePlay(SOUND_MENU_CANCEL);
-            }
+            if (val >= 0 && val <= 180) { settings.servo_start_angle = val; safePlay(SOUND_MENU_CONFIRM); } 
+            else safePlay(SOUND_MENU_CANCEL);
             currentConfigState = MENU_SERVO_SETTINGS;
         }
       } break;
@@ -554,17 +537,12 @@ inline void handleConfigMode(char key) {
         }
         if (key == '*') {
             size_t len = strlen(configInputBuffer);
-            if (len > 0) configInputBuffer[len-1] = '\0';
-            else currentConfigState = MENU_SERVO_SETTINGS;
+            if (len > 0) configInputBuffer[len-1] = '\0'; else currentConfigState = MENU_SERVO_SETTINGS;
         }
         if (key == '#') {
             int val = atoi(configInputBuffer);
-            if (val >= 0 && val <= 180) { 
-              settings.servo_end_angle = val; 
-              safePlay(SOUND_MENU_CONFIRM); 
-            } else {
-              safePlay(SOUND_MENU_CANCEL);
-            }
+            if (val >= 0 && val <= 180) { settings.servo_end_angle = val; safePlay(SOUND_MENU_CONFIRM); } 
+            else safePlay(SOUND_MENU_CANCEL);
             currentConfigState = MENU_SERVO_SETTINGS;
         }
       } break;
@@ -580,25 +558,88 @@ inline void handleConfigMode(char key) {
       } break;
 
       case MENU_VIEW_RFIDS: {
-        int total = settings.num_rfid_uids + 2;
+        int total = settings.num_rfid_uids + 3;
         if (key == '2') rfidViewIndex = (rfidViewIndex - 1 + total) % total;
         if (key == '8') rfidViewIndex = (rfidViewIndex + 1) % total;
         if (key == '#') {
           if (rfidViewIndex < settings.num_rfid_uids) {
+            // EDIT/DELETE EXISTING
+            currentConfigState = MENU_DELETE_RFID_CONFIRM;
           } else if (rfidViewIndex == settings.num_rfid_uids) {
             if (settings.num_rfid_uids < MAX_RFID_UIDS) {
-               currentConfigState = MENU_ADD_RFID;
-               rfid.PCD_Init(); 
-            }
-            else safePlay(SOUND_MENU_CANCEL);
+               currentConfigState = MENU_ADD_RFID_SELECT_TYPE; // Ask type first
+            } else safePlay(SOUND_MENU_CANCEL);
           } else {
-            currentConfigState = MENU_CLEAR_RFIDS_CONFIRM;
+             if (rfidViewIndex == settings.num_rfid_uids + 1) currentConfigState = MENU_RFID_ADV_SETTINGS;
+             else if (rfidViewIndex == settings.num_rfid_uids + 2) currentConfigState = MENU_CLEAR_RFIDS_CONFIRM; 
           }
         }
         if (key == '*') currentConfigState = MENU_MAIN;
       } break;
 
-      case MENU_ADD_RFID: { if (key == '*') currentConfigState = MENU_VIEW_RFIDS; } break;
+      // NEW: DELETE CONFIRMATION LOGIC
+      case MENU_DELETE_RFID_CONFIRM: {
+         if (key == '#') {
+            // Perform Delete
+            if (rfidViewIndex < settings.num_rfid_uids) {
+                // Shift array left
+                for (int i = rfidViewIndex; i < settings.num_rfid_uids - 1; i++) {
+                    settings.rfid_uids[i] = settings.rfid_uids[i+1];
+                }
+                settings.num_rfid_uids--;
+                safePlay(SOUND_MENU_CONFIRM);
+                // Adjust index if we deleted the last item
+                if (rfidViewIndex >= settings.num_rfid_uids && rfidViewIndex > 0) {
+                    rfidViewIndex--;
+                }
+            }
+            currentConfigState = MENU_VIEW_RFIDS;
+         }
+         if (key == '*') currentConfigState = MENU_VIEW_RFIDS;
+      } break;
+
+      case MENU_ADD_RFID_SELECT_TYPE: {
+        if (key == '1') { // Disarm
+           configInputBuffer[0] = '0'; // abuse buffer to store type
+           currentConfigState = MENU_ADD_RFID_WAIT;
+           rfid.PCD_Init(); 
+        }
+        if (key == '2') { // Arm
+           configInputBuffer[0] = '1';
+           currentConfigState = MENU_ADD_RFID_WAIT;
+           rfid.PCD_Init();
+        }
+        if (key == '*') currentConfigState = MENU_VIEW_RFIDS;
+      } break;
+      
+      case MENU_ADD_RFID_WAIT: {
+         if (key == '*') currentConfigState = MENU_VIEW_RFIDS;
+      } break;
+
+      case MENU_RFID_ADV_SETTINGS: {
+        if (key == '1') currentConfigState = MENU_RFID_ARMING_MODE;
+        if (key == '2') { configInputBuffer[0]='\0'; currentConfigState = MENU_RFID_ENTRY_SPEED; }
+        if (key == '*') currentConfigState = MENU_VIEW_RFIDS;
+      } break;
+      case MENU_RFID_ARMING_MODE: {
+         if (key == '#') { settings.rfid_arming_mode = !settings.rfid_arming_mode; safePlay(SOUND_MENU_CONFIRM); }
+         if (key == '*') currentConfigState = MENU_RFID_ADV_SETTINGS;
+      } break;
+      case MENU_RFID_ENTRY_SPEED: {
+         if (isdigit(key)) {
+            size_t len = strlen(configInputBuffer);
+            if (len + 1 < CONFIG_INPUT_MAX) { configInputBuffer[len] = key; configInputBuffer[len+1] = '\0'; }
+         }
+         if (key == '*') {
+            size_t len = strlen(configInputBuffer);
+            if (len > 0) configInputBuffer[len-1] = '\0'; else currentConfigState = MENU_RFID_ADV_SETTINGS;
+         }
+         if (key == '#') {
+            int val = atoi(configInputBuffer);
+            settings.rfid_entry_speed_ms = val; safePlay(SOUND_MENU_CONFIRM); 
+            currentConfigState = MENU_RFID_ADV_SETTINGS;
+         }
+      } break;
 
       case MENU_CLEAR_RFIDS_CONFIRM: {
         if (key == '#') { settings.num_rfid_uids = 0; safePlay(SOUND_MENU_CONFIRM); currentConfigState = MENU_VIEW_RFIDS; }
@@ -701,18 +742,23 @@ inline void handleConfigMode(char key) {
     }
   }
 
-  if (currentConfigState == MENU_ADD_RFID) {
+  // Handle Scan logic
+  if (currentConfigState == MENU_ADD_RFID_WAIT) {
     if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()) {
       if (rfid.uid.size <= 10) {
         if (settings.num_rfid_uids < MAX_RFID_UIDS) {
           Settings::TagUID &slot = settings.rfid_uids[settings.num_rfid_uids];
           slot.len = rfid.uid.size;
           memcpy(slot.bytes, rfid.uid.uidByte, rfid.uid.size);
+          // Set Type based on previous selection
+          slot.type = (configInputBuffer[0] == '1') ? 1 : 0;
+          
           settings.num_rfid_uids++;
           safePlay(SOUND_MENU_CONFIRM);
           String uid = String("Added: ") + UIDUtil::toHex(slot.bytes, slot.len);
           centerPrint(uid, 1);
-          delay(600);
+          centerPrintC(slot.type==1 ? "[ARMING]" : "[DISARM]", 2);
+          delay(1000);
           currentConfigState = MENU_VIEW_RFIDS;
         } else safePlay(SOUND_MENU_CANCEL);
       } else safePlay(SOUND_MENU_CANCEL);
@@ -723,11 +769,46 @@ inline void handleConfigMode(char key) {
 }
 
 inline void serviceGameplay(char key) {
+  // PING LOGIC (Only in Idle)
+  if (currentState == PROP_IDLE && settings.ping_enabled) {
+      if (millis() - lastPingTime > (settings.ping_interval_s * 1000UL)) {
+         safePlay(SOUND_PING);
+         lastPingTime = millis();
+      }
+  }
+
+  // FIX: AUTO TYPING ABORT (Moved Here)
+  // If a real key is pressed while auto typing, we abort.
+  if (key && autoTypingActive) {
+      autoTypingActive = false;
+      // We also process the key normally below, so it interrupts AND types the new number.
+  }
+
+  // AUTO TYPING LOGIC
+  if (autoTypingActive) {
+      if (millis() - lastAutoTypeTime > settings.rfid_entry_speed_ms) {
+          lastAutoTypeTime = millis();
+          int currentLen = strlen(enteredCode);
+          int targetLen = strlen(autoTypingTarget);
+          
+          if (currentLen < targetLen) {
+              // Type next char
+              handleKeypadInput(autoTypingTarget[currentLen]);
+          } else {
+              // Press Enter
+              handleKeypadInput('#');
+              autoTypingActive = false;
+          }
+      }
+      return; // Skip normal key handling while auto-typing
+  }
+
   switch (currentState) {
     case STARWARS_PRE_GAME:
     case PROP_IDLE:
     case ARMING:
       handleKeypadInput(key);
+      handleRfid(); // Check for Arming cards
       break;
 
     case DISARMING_KEYPAD:
@@ -757,9 +838,7 @@ inline void serviceGameplay(char key) {
         setState(DISARMED);
       break;
 
-    // Trigger Servo/Strobe check inside gameplay loop when exploded/pre-exploded
     case PRE_EXPLOSION:
-      // Timing Check: 4500ms after entry (sync with strobe)
       if (settings.servo_enabled && !servoTriggeredThisExplosion) {
          if (millis() - stateEntryTimestamp >= 4500) {
              startShellEjectorSequence();

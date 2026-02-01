@@ -1,7 +1,6 @@
 // Display.h
-// VERSION: 6.2.0
-// OPTIMIZED: Redesigned centerPrint to reduce I2C transactions by ~50%
-// This significantly improves keypad responsiveness during timers.
+// VERSION: 7.1.0
+// ADDED: Delete Card Confirmation Screen
 
 #pragma once
 #include "State.h"
@@ -16,8 +15,6 @@ inline void clearRow(int row) {
   lcd.print("                    ");
 }
 
-// OPTIMIZED: Builds a full 20-char line in memory and sends it once.
-// Eliminates the need to "clear" the row first, cutting I2C traffic in half.
 inline void centerPrint(const String& text, int row) {
   char buf[21];
   memset(buf, ' ', 20); // Fill buffer with spaces
@@ -37,7 +34,6 @@ inline void centerPrint(const String& text, int row) {
   lcd.print(buf);
 }
 
-// OPTIMIZED: C-String version
 inline void centerPrintC(const char* text, int row) {
   char buf[21];
   memset(buf, ' ', 20); // Fill buffer with spaces
@@ -77,16 +73,16 @@ inline void updateDisplay() {
 
         const char* items[] = {
           "Bomb Time", "Manual Disarm", "RFID Disarm",
+          "Fixed Code", 
           "Sudden Death", "Dud Settings", 
           "RFID Tags", "Hardware & Audio", "Network",
           "Save & Exit", "Exit" 
         };
-        const int TOTAL = 10; 
+        const int TOTAL = 11; 
 
         for (int i = -1; i <= 1; ++i) {
           int row = i + 2;
           int itemIndex = (configMenuIndex + i + TOTAL) % TOTAL;
-          // For the menu, we construct the line manually to include the cursor
           char lineBuf[21];
           memset(lineBuf, ' ', 20); lineBuf[20] = 0;
           
@@ -115,6 +111,26 @@ inline void updateDisplay() {
         centerPrintC("(#=Save, *=Back)", 3);
       } break;
 
+      // FIXED CODE MENUS
+      case MENU_FIXED_CODE_SETTINGS: {
+        centerPrintC("FIXED CODE MODE", 0);
+        lcd.setCursor(0,1); lcd.print("1 Enable: "); lcd.print(settings.fixed_code_enabled ? "ON " : "OFF");
+        lcd.setCursor(0,2); lcd.print("2 Set Code"); 
+        centerPrint(String("Val: ") + settings.fixed_code_val, 3);
+      } break;
+      case MENU_FIXED_CODE_TOGGLE: {
+        centerPrintC("Fixed Code Req?", 0);
+        centerPrintC(settings.fixed_code_enabled ? "Currently: ON" : "Currently: OFF", 1);
+        centerPrintC("(#=Toggle, *=Back)", 2);
+      } break;
+      case MENU_SET_FIXED_CODE: {
+        centerPrintC("Set Fixed Code", 0);
+        centerPrintC("(Max 7 Digits)", 1);
+        char buffer[21]; snprintf(buffer, sizeof(buffer), ": %s", configInputBuffer);
+        centerPrintC(buffer, 2);
+        centerPrintC("(#=Save *=Back)", 3);
+      } break;
+
       case MENU_SUDDEN_DEATH_TOGGLE: {
         centerPrintC("Sudden Death Mode", 0);
         centerPrintC(settings.sudden_death_mode ? "Currently: ON" : "Currently: OFF", 1);
@@ -136,10 +152,8 @@ inline void updateDisplay() {
          centerPrintC("(#=Save *=Back)", 3); 
       } break;
 
-      // --- HARDWARE / AUDIO SUBMENU ---
       case MENU_HARDWARE_SUBMENU: {
          centerPrintC("HARDWARE CONFIG", 0);
-         // Manual optimization for static menus isn't strictly necessary but safe
          lcd.setCursor(0,1); lcd.print("1 Audio  2 Servo    ");
          lcd.setCursor(0,2); lcd.print("3 Sensor 4 FX/Xtras ");
          lcd.setCursor(0,3); lcd.print("* Back              ");
@@ -147,7 +161,6 @@ inline void updateDisplay() {
 
       case MENU_AUDIO_SUBMENU: {
          centerPrintC("AUDIO CONFIG", 0);
-         // Use manual printing to ensure clean lines
          lcd.setCursor(0,1); lcd.print("1 Sound: "); lcd.print(settings.sound_enabled ? "ON " : "OFF"); lcd.print("        ");
          lcd.setCursor(0,2); lcd.print("2 Volume: "); lcd.print(settings.sound_volume); lcd.print("        ");
          lcd.setCursor(0,3); lcd.print("* Back              ");
@@ -173,12 +186,37 @@ inline void updateDisplay() {
         centerPrintC("(#=Toggle, *=Back)", 2);
       } break;
 
-      // --- EFFECTS (Easter Eggs / Strobe) ---
+      // --- EFFECTS / XTRAS ---
       case MENU_EXTRAS_SUBMENU: { 
          centerPrintC("EFFECTS", 0);
-         lcd.setCursor(0,1); lcd.print("1 Strobe: "); lcd.print(settings.explosion_strobe_enabled ? "ON " : "OFF"); lcd.print("     ");
-         lcd.setCursor(0,2); lcd.print("2 Eggs: "); lcd.print(settings.easter_eggs_enabled ? "ON " : "OFF"); lcd.print("       ");
-         lcd.setCursor(0,3); lcd.print("* Back              ");
+         lcd.setCursor(0,1); lcd.print("1 Strobe: "); lcd.print(settings.explosion_strobe_enabled ? "ON " : "OFF");
+         lcd.setCursor(0,2); lcd.print("2 Eggs: "); lcd.print(settings.easter_eggs_enabled ? "ON " : "OFF");
+         lcd.setCursor(0,3); lcd.print("3 Homing Ping  *Back"); 
+      } break;
+
+      // PING MENU
+      case MENU_PING_SETTINGS: {
+        centerPrintC("HOMING PING", 0);
+        lcd.setCursor(0,1); lcd.print("1 Enable: "); lcd.print(settings.ping_enabled ? "ON " : "OFF");
+        lcd.setCursor(0,2); lcd.print("2 Time: "); lcd.print(settings.ping_interval_s); lcd.print("s");
+        lcd.setCursor(0,3); lcd.print("3 Light: "); lcd.print(settings.ping_light_enabled ? "ON " : "OFF");
+      } break;
+      case MENU_PING_TOGGLE: {
+         centerPrintC("Enable Ping?", 0);
+         centerPrintC(settings.ping_enabled ? "Status: ON" : "Status: OFF", 1);
+         centerPrintC("(#=Toggle *=Back)", 3);
+      } break;
+      case MENU_PING_INTERVAL: {
+         centerPrintC("Set Ping Interval", 0);
+         centerPrintC("(Seconds)", 1);
+         char buffer[21]; snprintf(buffer, sizeof(buffer), "Val: %s", configInputBuffer);
+         centerPrintC(buffer, 2);
+         centerPrintC("(#=Save *=Back)", 3);
+      } break;
+      case MENU_PING_LIGHT_TOGGLE: {
+         centerPrintC("Ping Light Flash?", 0);
+         centerPrintC(settings.ping_light_enabled ? "Status: ON" : "Status: OFF", 1);
+         centerPrintC("(#=Toggle *=Back)", 3);
       } break;
 
       case MENU_SERVO_SETTINGS: {
@@ -224,16 +262,60 @@ inline void updateDisplay() {
       } break;
 
       case MENU_VIEW_RFIDS: {
-        centerPrintC("Registered RFID Tags", 0);
+        centerPrintC("Registered Cards", 0);
         if (rfidViewIndex < settings.num_rfid_uids) {
           const Settings::TagUID &t = settings.rfid_uids[rfidViewIndex];
-          centerPrint(String(rfidViewIndex + 1) + ": " + UIDUtil::toHex(t.bytes, t.len), 1);
+          String typeStr = (t.type == 1) ? "[ARM]" : "[DIS]";
+          centerPrint(typeStr + " " + UIDUtil::toHex(t.bytes, t.len), 1);
+          centerPrint(String("Tag ") + (rfidViewIndex + 1) + "/" + settings.num_rfid_uids, 2);
         } else if (rfidViewIndex == settings.num_rfid_uids) {
           centerPrintC("> Add New Tag <", 1);
+        } else if (rfidViewIndex == settings.num_rfid_uids + 1) {
+          centerPrintC("> Adv. Settings <", 1);
         } else {
           centerPrintC("> Clear All Tags <", 1);
         }
         centerPrintC("(#=Select, *=Back)", 3);
+      } break;
+
+      case MENU_DELETE_RFID_CONFIRM: {
+         centerPrintC("DELETE THIS CARD?", 0);
+         const Settings::TagUID &t = settings.rfid_uids[rfidViewIndex];
+         String uid = UIDUtil::toHex(t.bytes, t.len);
+         centerPrint(uid, 1);
+         centerPrintC("(#=YES, *=NO)", 3);
+      } break;
+
+      case MENU_ADD_RFID_SELECT_TYPE: {
+        centerPrintC("New Card Function?", 0);
+        centerPrintC("1: DISARM KEY", 1);
+        centerPrintC("2: ARMING KEY", 2);
+        centerPrintC("(*=Cancel)", 3);
+      } break;
+
+      case MENU_ADD_RFID_WAIT: {
+        centerPrintC("SCAN TAG NOW...", 1);
+        centerPrintC("(*=Cancel)", 3);
+      } break;
+
+      case MENU_RFID_ADV_SETTINGS: {
+        centerPrintC("RFID ARM SETTINGS", 0);
+        lcd.setCursor(0,1); lcd.print("1 Mode: "); lcd.print(settings.rfid_arming_mode ? "RANDOM" : "FIXED ");
+        lcd.setCursor(0,2); lcd.print("2 Speed: "); lcd.print(settings.rfid_entry_speed_ms); lcd.print("ms");
+        lcd.setCursor(0,3); lcd.print("* Back");
+      } break;
+
+      case MENU_RFID_ARMING_MODE: {
+        centerPrintC("Arming Code Logic", 0);
+        centerPrintC(settings.rfid_arming_mode ? "Current: RANDOM" : "Current: FIXED CODE", 1);
+        centerPrintC("(#=Toggle *=Back)", 3);
+      } break;
+      case MENU_RFID_ENTRY_SPEED: {
+         centerPrintC("Typing Speed (ms)", 0);
+         centerPrintC("(0=Instant)", 1);
+         char buffer[21]; snprintf(buffer, sizeof(buffer), "Val: %s", configInputBuffer);
+         centerPrintC(buffer, 2);
+         centerPrintC("(#=Save *=Back)", 3); 
       } break;
 
       case MENU_NETWORK: {
@@ -396,6 +478,17 @@ inline void updateDisplay() {
       case PROP_IDLE:
         centerPrintC("System Activated", 0);
         centerPrintC("Enter Arming Code:", 2);
+        // Show auto-typing progress if active
+        if (autoTypingActive) {
+            String formattedCode;
+            int codeLen = strlen(enteredCode);
+            for (int i = 0; i < CODE_LENGTH; i++) {
+               if (i < codeLen) formattedCode += enteredCode[i];
+               else formattedCode += "_";
+               if (i < CODE_LENGTH-1) formattedCode += " ";
+            }
+            centerPrint(formattedCode, 3);
+        }
         break;
         
       case STARWARS_PRE_GAME:
@@ -467,78 +560,159 @@ inline void updateDisplay() {
 }
 
 // --- LED Logic ---
-// MOVED inside header to be available to main sketch
 
 inline void updateLeds() {
+  uint32_t now = millis();
+
   // --- 1. STATUS LED (Index 0) ---
   switch (currentState) {
     case STANDBY:
-    case AWAIT_ARM_TOGGLE: leds[0] = CRGB::Black; break;
+    case AWAIT_ARM_TOGGLE: 
+      leds[0] = CRGB::Black; 
+      break;
+      
     case PROP_IDLE:
-    case ARMING: leds[0] = CRGB::Yellow; break;
+      // Yellow Pulse
+      leds[0] = CRGB(beatsin8(30, 50, 255), beatsin8(30, 40, 200), 0);
+      break;
+      
+    case ARMING: 
+      leds[0] = CRGB::Yellow; 
+      break;
+      
     case ARMED: 
       if (easterEggActive) {
-        // Easter Egg Logic: Cycle colors if the flag is active
         int cycle = (millis() / EASTER_EGG_CYCLE_MS) % 3;
         leds[0] = (cycle==0)?CRGB::Red: (cycle==1)?CRGB::Green: CRGB::Blue;
       } else {
-        // Standard Logic: Red Blink
         leds[0] = ledIsOn ? CRGB::Red : CRGB::Black;
       }
       break;
+      
     case DISARMING_KEYPAD:
     case DISARMING_MANUAL:
-    case DISARMING_RFID: leds[0] = CRGB::Blue; break;
-    case DISARMED: leds[0] = CRGB::Green; break;
+    case DISARMING_RFID: 
+      leds[0] = CRGB::Blue; 
+      break;
+      
+    case DISARMED: 
+      leds[0] = CRGB::Green; 
+      break;
+      
     case PRE_EXPLOSION: {
       uint32_t fade = millis() - stateEntryTimestamp;
       uint8_t b = (fade >= PRE_EXPLOSION_FADE_MS) ? 255 : (uint8_t)((fade * 255UL) / PRE_EXPLOSION_FADE_MS);
       leds[0] = CRGB(b,0,0);
     } break;
-    case EXPLODED: leds[0] = CRGB::Red; break;
+    
+    case EXPLODED: 
+      leds[0] = CRGB::Red; 
+      break;
+      
     case EASTER_EGG: {
-      // Logic handled in ARMED case via flag, but kept here for initial transition
       int cycle = (millis() / EASTER_EGG_CYCLE_MS) % 3;
       leds[0] = (cycle==0)?CRGB::Red: (cycle==1)?CRGB::Green: CRGB::Blue;
     } break;
+    
     case STARWARS_PRE_GAME: {
-      // Slow pulse Green/Red
       int cycle = (millis() / 500) % 2;
       leds[0] = (cycle==0) ? CRGB::Red : CRGB::Green;
     } break;
+    
     case EASTER_EGG_2:
       leds[0] = CRGB::HotPink; 
       break;
+      
     case PROP_DUD:
-      // Custom effect: Toggle Purple/Orange
       leds[0] = ((millis() / 250) % 2 == 0) ? CRGB::Purple : CRGB::Orange;
       break;
-    case CONFIG_MODE: leds[0] = CRGB::DeepPink; break;
+      
+    case CONFIG_MODE: 
+      leds[0] = CRGB::DeepPink; 
+      break;
+      
     default: break;
   }
 
   // --- 2. EXTERIOR STRIP (Indices 1 to NUM_LEDS-1) ---
   if (NUM_LEDS > 1) {
     
-    // A. STAR WARS PRE-GAME FX
-    if (currentState == STARWARS_PRE_GAME) {
-       // Random flashes to simulate saber clashes or "ready" state
+    // A. COUNTDOWN (Updated: Flash every 3rd LED)
+    if (currentState == ARMED && !easterEggActive && !doomModeActive) {
+       if (ledIsOn) {
+          for(int i=1; i<NUM_LEDS; i++) {
+             // Every 3rd LED flashes Red
+             if (i % 3 == 0) leds[i] = CRGB::Red;
+             else leds[i] = CRGB::Black;
+          }
+       } else {
+          fill_solid(leds + 1, NUM_LEDS - 1, CRGB::Black);
+       }
+    }
+    
+    // FIX: Added DISARMING_KEYPAD to Blue Chase
+    else if (currentState == DISARMING_MANUAL || currentState == DISARMING_RFID || currentState == DISARMING_KEYPAD) {
+        uint8_t pos = (millis() / 50) % NUM_LEDS;
+        for(int i=1; i<NUM_LEDS; i++) {
+           if ( abs(i - pos) < 3 || abs(i - (pos+NUM_LEDS)) < 3 ) {
+              leds[i] = CRGB::Blue;
+           } else {
+              leds[i].nscale8(200); // fade tail
+           }
+        }
+    }
+    
+    // C. DISARMED (Solid Green)
+    else if (currentState == DISARMED) {
+       fill_solid(leds + 1, NUM_LEDS - 1, CRGB::Green);
+    }
+
+    // D. PROP IDLE (Ping & Pulse)
+    else if (currentState == PROP_IDLE) {
+       // Breathing Yellow
+       uint8_t val = beatsin8(20, 0, 100);
+       fill_solid(leds + 1, NUM_LEDS - 1, CRGB(val, val/2, 0));
+       
+       // PING FLASH (Override)
+       extern uint32_t lastPingTime;
+       if (settings.ping_enabled && settings.ping_light_enabled && (millis() - lastPingTime < 200)) {
+           fill_solid(leds + 1, NUM_LEDS - 1, CRGB::White);
+           leds[0] = CRGB::White; 
+       }
+    }
+
+    // E. AUTO TYPING (Green Blips)
+    else if (autoTypingActive) {
+       uint8_t r = random(1, NUM_LEDS);
+       leds[r] = CRGB::Green;
+       fadeToBlackBy(leds+1, NUM_LEDS-1, 50);
+    }
+    
+    // F. STAR WARS PRE-GAME FX
+    else if (currentState == STARWARS_PRE_GAME) {
        if (random(10) == 0) {
           int pos = random(1, NUM_LEDS);
           leds[pos] = (random(2)==0) ? CRGB::Green : CRGB::Red;
        } else {
-          fadeToBlackBy(leds + 1, NUM_LEDS - 1, 40); // Fade trail
+          fadeToBlackBy(leds + 1, NUM_LEDS - 1, 40); 
        }
     }
     
-    // B. EXPLOSION STROBE (Chaotic White Flash)
-    else if (currentState == PRE_EXPLOSION) {
-       // Only run if enabled
-       if (settings.explosion_strobe_enabled) {
+    // G. EXPLOSION STROBE / DOOM
+    else if (currentState == PRE_EXPLOSION || (currentState == ARMED && doomModeActive)) {
+       // ... existing logic ...
+       if (currentState == ARMED && doomModeActive) {
+           fadeToBlackBy(leds + 1, NUM_LEDS - 1, 100);
+           for(int i=0; i<20; i++) { 
+              int pos = random(1, NUM_LEDS);
+              int c = random(10);
+              if (c < 6) leds[pos] = CRGB::Red;
+              else if (c < 9) leds[pos] = CRGB::OrangeRed;
+              else leds[pos] = CRGB::White; 
+           }
+       } else if (settings.explosion_strobe_enabled) {
           uint32_t elapsed = millis() - stateEntryTimestamp;
-          // Delayed Start: 4500ms
           if (elapsed > 4500 && elapsed < 8500) {
-             // Much Faster Strobe (Every 50ms)
              bool flash = (millis() / 40) % 2; 
              fill_solid(leds + 1, NUM_LEDS - 1, flash ? CRGB::White : CRGB::Black);
           } else {
@@ -549,21 +723,7 @@ inline void updateLeds() {
        }
     }
     
-    // C. DOOM MODE (Chaotic Hellfire)
-    else if (currentState == ARMED && doomModeActive) {
-       // 1. Fade everything slightly
-       fadeToBlackBy(leds + 1, NUM_LEDS - 1, 100);
-       
-       // 2. Ignite random spots
-       for(int i=0; i<20; i++) { 
-          int pos = random(1, NUM_LEDS);
-          int colorPick = random(10);
-          if (colorPick < 6) leds[pos] = CRGB::Red;
-          else if (colorPick < 9) leds[pos] = CRGB::OrangeRed;
-          else leds[pos] = CRGB::White; // Spark
-       }
-    }
-    // D. DEFAULT (Off)
+    // H. DEFAULT (Off)
     else {
        fill_solid(leds + 1, NUM_LEDS - 1, CRGB::Black);
     }

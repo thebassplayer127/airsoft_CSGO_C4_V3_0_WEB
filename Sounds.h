@@ -1,6 +1,6 @@
 // Sounds.h
-// VERSION: 4.3.0
-// ADDED: Track 47 (SOUND_DISARM_LOOP) to expanded list
+// VERSION: 4.4.0
+// ADDED: Track 48 (SOUND_PING)
 
 #pragma once
 
@@ -55,6 +55,7 @@
 #define SOUND_AINT_FOUND_SHIT     45 // Spaceballs unused
 #define SOUND_REKT_NERD           46 // Unused
 #define SOUND_DISARM_LOOP         47 // Continuous noise while disarming
+#define SOUND_PING                48 // Idle Homing Ping
 
 // --- LOGICAL ALIASES ---
 #define SOUND_MENU_NAV            SOUND_KEY_PRESS

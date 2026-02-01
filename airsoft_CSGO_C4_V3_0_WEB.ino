@@ -1,8 +1,10 @@
 /*
   PROJECT: Counter-Strike C4 Prop (Project 2)
-  VERSION: 4.0.1
-  DATE: 2026-01-19
+  DATE: 2026-02-01
   AUTHOR: Andrew Florio
+
+  airsoft_CSGO_C4_V3_0_WEB.ino
+  VERSION: 4.0.1
 
   Header-only modular structure for Arduino IDE, with Wi-Fi + mDNS + WebSocket.
   OPTIMIZATION: Throttled LED updates to improve Keypad responsiveness.
