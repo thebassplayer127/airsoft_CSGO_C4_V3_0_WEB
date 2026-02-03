@@ -230,16 +230,16 @@ inline void setState(PropState newState) {
         return; 
       }
 
-      myDFPlayer.stop(); 
+      safeStop(); 
       delay(50); 
       
       doomModeActive = false; 
       
       if (terminatorModeActive) {
-         safePlay(SOUND_ILL_BE_BACK); 
+         safePlayForce(SOUND_ILL_BE_BACK); 
       }
       else {
-         safePlay(SOUND_DETONATION_NEW);
+         safePlayForce(SOUND_DETONATION_NEW);
       }
     } break;
       
@@ -247,9 +247,9 @@ inline void setState(PropState newState) {
       break;
     
     case PROP_DUD:
-      myDFPlayer.stop();
+      safeStop();
       delay(50);
-      safePlay(SOUND_DUD_FAIL);
+      safePlayForce(SOUND_DUD_FAIL);
       break;
 
     case EASTER_EGG:
@@ -269,6 +269,21 @@ inline void setState(PropState newState) {
 }
 
 inline void printDetail(uint8_t type, int value) {
+
+static uint8_t dfErrCount = 0;
+
+if (type == DFPlayerError) {
+  dfErrCount++;
+  if (dfErrCount >= 3) {
+    dfErrCount = 0;
+    dfplayerSoftReset();
+  }
+  return;
+}
+
+// any normal event means comms are alive
+dfErrCount = 0;
+
   if (type == DFPlayerPlayFinished) {
     if (currentState == EXPLODED) return;
 

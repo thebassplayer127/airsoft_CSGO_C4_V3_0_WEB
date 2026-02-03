@@ -87,7 +87,7 @@ static constexpr uint32_t RANDOM_DIGIT_UPDATE_MS  = 150;
 static constexpr uint32_t EASTER_EGG_CYCLE_MS     = 100;
 
 // Audio / Visual
-static constexpr int      BEEP_TONE_FREQ          = 2400; 
+static constexpr int      BEEP_TONE_FREQ          = 2070; 
 static constexpr uint32_t BEEP_TONE_DURATION_MS   = 225;
 static constexpr int      NEOPIXEL_BRIGHTNESS     = 255;
 static constexpr size_t   CONFIG_INPUT_MAX        = 16;

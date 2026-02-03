@@ -59,6 +59,7 @@ inline void initHardware() {
   Serial0.begin(9600);
   myDFPlayer.begin(Serial0, true, true);
   myDFPlayer.volume(settings.sound_volume);
+  myDFPlayer.setTimeOut(1000);
 
   // Inputs
   disarmButton.attach(DISARM_BUTTON_PIN, INPUT_PULLUP);
@@ -77,10 +78,46 @@ inline void initHardware() {
 inline void safePlay(int track) {
   if (!settings.sound_enabled) return; 
 
-  if (millis() - lastAudioCmdTime > AUDIO_COOLDOWN_MS) {
+  if (millis() - lastAudioCmdTime >= AUDIO_COOLDOWN_MS) {
     myDFPlayer.play(track);
     lastAudioCmdTime = millis();
   }
+}
+
+inline void safePlayForce(int track) {
+  if (!settings.sound_enabled) return;
+  myDFPlayer.play(track);
+  lastAudioCmdTime = millis();
+}
+
+inline void safeStop() {
+  if (!settings.sound_enabled) return;
+
+  if (millis() - lastAudioCmdTime >= AUDIO_COOLDOWN_MS) {
+    myDFPlayer.stop();
+    lastAudioCmdTime = millis();
+  }
+}
+
+inline void safeVolume(uint8_t vol) {
+  if (millis() - lastAudioCmdTime >= AUDIO_COOLDOWN_MS) {
+    myDFPlayer.volume(vol);
+    lastAudioCmdTime = millis();
+  }
+}
+
+inline void dfplayerSoftReset() {
+  static uint32_t lastResetMs = 0;
+  if (millis() - lastResetMs < 5000) return; // don't spam resets
+  lastResetMs = millis();
+
+  // library supports reset command; begin() also has doReset support
+  myDFPlayer.reset();                         // :contentReference[oaicite:2]{index=2}
+  delay(1200);
+
+  // re-init without an additional reset (we already did it)
+  myDFPlayer.begin(Serial0, true, false);     // ACK on, doReset off :contentReference[oaicite:3]{index=3}
+  myDFPlayer.volume(settings.sound_volume);
 }
 
 // --- BUZZER CONTROL ---

@@ -40,7 +40,12 @@ inline void menuBeepPump() {
   static unsigned long startedAt = 0;
   static bool running = false;
   if (!running) { if (!ledIsOn) { running = true; startedAt = millis(); } }
-  else { if (millis() - startedAt >= 60) { beepStop(); running = false; } }
+  else { if (millis() - startedAt >= 60) {
+  if (!ledIsOn) {
+    beepStop();
+  }
+  running = false;
+} }
 #endif
 }
 

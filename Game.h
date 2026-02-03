@@ -149,9 +149,7 @@ inline void handleKeypadInput(char key) {
     if ((int)strlen(enteredCode) < CODE_LENGTH) {
       int len = strlen(enteredCode);
       enteredCode[len] = key;
-      enteredCode[len + 1] = '\0';
-      safePlay(SOUND_KEY_PRESS);
-    }
+      enteredCode[len + 1] = '\0';}
     
     if (currentState == DISARMING_KEYPAD) {
       bool matched = false;
@@ -199,7 +197,7 @@ inline void handleDisarmButton() {
     if (disarmButton.fell()) setState(DISARMING_MANUAL);
   }
   if (currentState == DISARMING_MANUAL && disarmButton.rose()) {
-      myDFPlayer.stop(); 
+      safeStop(); 
       setState(ARMED);
   }
 }
@@ -285,6 +283,7 @@ inline void handleBeepLogic() {
       if (cachedInterval < 50) cachedInterval = 50;
       if (cachedInterval < (BEEP_TONE_DURATION_MS * 2)) cachedBeepDuration = cachedInterval / 2;
       else cachedBeepDuration = BEEP_TONE_DURATION_MS;
+      if (cachedBeepDuration < 60) cachedBeepDuration = 60;
       lastCurveCalc = millis();
   }
 
@@ -452,7 +451,7 @@ inline void handleConfigMode(char key) {
          }
          if (key == '#') {
             int val = atoi(configInputBuffer);
-            if (val >= 0 && val <= 30) { settings.sound_volume = val; myDFPlayer.volume(val); }
+            if (val >= 0 && val <= 30) { settings.sound_volume = val; safeVolume(val); }
             currentConfigState = MENU_AUDIO_SUBMENU;
          }
       } break;
