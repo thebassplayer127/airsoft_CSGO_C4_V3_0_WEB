@@ -1,6 +1,6 @@
 /*
   PROJECT: Counter-Strike C4 Prop (Project 2)
-  DATE: 2026-02-01
+  DATE: 2026-02-03
   AUTHOR: Andrew Florio
 
   airsoft_CSGO_C4_V3_0_WEB.ino

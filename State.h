@@ -1,7 +1,7 @@
 // State.h
-// VERSION: 6.5.0
+// VERSION: 6.5.1
 // FIXED: Auto-Typing persistence during state change (IDLE->ARMING)
-// ADDED: Menu state for deleting specific RFID cards
+// FIXED: Immediate DFPlayer Soft Reset on Error
 
 #pragma once
 #include "Config.h"
@@ -270,20 +270,16 @@ inline void setState(PropState newState) {
 
 inline void printDetail(uint8_t type, int value) {
 
-static uint8_t dfErrCount = 0;
-
-if (type == DFPlayerError) {
-  dfErrCount++;
-  if (dfErrCount >= 3) {
-    dfErrCount = 0;
+  // --- ERROR HANDLING & RECOVERY ---
+  if (type == DFPlayerError) {
+    // If we detect *any* error (checksum, busy, etc), try a hard recovery.
+    // Note: The reset includes a delay(1200) which will briefly pause gameplay.
+    Serial.print(F("[DFPlayer] Err Code: ")); Serial.println(value);
     dfplayerSoftReset();
+    return;
   }
-  return;
-}
 
-// any normal event means comms are alive
-dfErrCount = 0;
-
+  // --- NORMAL OPERATION ---
   if (type == DFPlayerPlayFinished) {
     if (currentState == EXPLODED) return;
 

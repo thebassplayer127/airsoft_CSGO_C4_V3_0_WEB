@@ -1,7 +1,6 @@
 // Hardware.h
-// VERSION: 3.5.0
-// OPTIMIZED: I2C at 400kHz
-// FIXED: Buzzer Duty Cycle set to 128 (50%) for MAX VOLUME
+// VERSION: 3.5.1
+// FIXED: Updated DFPlayer Soft Reset logic for better freeze recovery
 
 #pragma once
 #include <Wire.h>
@@ -106,18 +105,30 @@ inline void safeVolume(uint8_t vol) {
   }
 }
 
+// --- RECOVERY LOGIC ---
 inline void dfplayerSoftReset() {
   static uint32_t lastResetMs = 0;
-  if (millis() - lastResetMs < 5000) return; // don't spam resets
+  // Prevent spamming resets if errors are continuous
+  if (millis() - lastResetMs < 5000) return; 
   lastResetMs = millis();
 
-  // library supports reset command; begin() also has doReset support
-  myDFPlayer.reset();                         // :contentReference[oaicite:2]{index=2}
+  Serial.println(F("[DFPlayer] Error detected. Executing Soft Reset..."));
+
+  // 1. Send Reset Command
+  myDFPlayer.reset();
+  
+  // 2. Wait for module to reboot (Blocking delay is necessary here)
   delay(1200);
 
-  // re-init without an additional reset (we already did it)
-  myDFPlayer.begin(Serial0, true, false);     // ACK on, doReset off :contentReference[oaicite:3]{index=3}
+  // 3. Re-initialize connection
+  // ACK = true
+  // doReset = false (We just did it manually)
+  myDFPlayer.begin(Serial0, true, false);     
+  
+  // 4. Restore settings
   myDFPlayer.volume(settings.sound_volume);
+  
+  Serial.println(F("[DFPlayer] Module Online."));
 }
 
 // --- BUZZER CONTROL ---
