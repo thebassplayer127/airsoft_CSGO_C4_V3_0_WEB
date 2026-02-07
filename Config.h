@@ -1,6 +1,6 @@
 // Config.h
-// VERSION: 5.0.2
-// DATE: 2026-02-03
+// VERSION: 5.0.3
+// DATE: 2026-02-07
 // UPDATE: Added Fixed Code, Expanded RFID (30), Arming Cards, Homing Ping
 
 #pragma once
@@ -8,7 +8,7 @@
 #include <EEPROM.h>
 
 // Version
-static const char* FW_VERSION = "5.0.2";
+static const char* FW_VERSION = "5.0.3";
 
 // EEPROM / Settings
 #define EEPROM_SIZE 512
