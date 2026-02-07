@@ -4,10 +4,11 @@
   AUTHOR: Andrew Florio
 
   airsoft_CSGO_C4_V3_0_WEB.ino
-  VERSION: 4.0.1
+  VERSION: 4.1.0
 
   Header-only modular structure for Arduino IDE, with Wi-Fi + mDNS + WebSocket.
   OPTIMIZATION: Throttled LED updates to improve Keypad responsiveness.
+  ADDED: Tolkien Mini-Game (Hold '0' on boot)
 */
 
 #include <Arduino.h>
@@ -27,7 +28,8 @@
 #include "Utils.h"
 #include "Display.h"
 #include "Network.h"
-#include "Game.h"          
+#include "Game.h"
+#include "TolkienGame.h" // <--- Added
 
 // ---- Default (weak) WS inbound handler ----
 __attribute__((weak)) void handleInboundWsMessage(const char* msg) {
@@ -43,10 +45,9 @@ Bounce2::Button armSwitch = Bounce2::Button();
 
 CRGB leds[NUM_LEDS]; 
 
-// SERVO DEFINITION (Must be here to handle the extern in ShellEjector.h)
+// SERVO DEFINITION
 Servo myServo;
 
-// FIX: Define the Ejector variables here so they are shared correctly
 EjectorState ejectorState = EJECTOR_IDLE;
 uint32_t ejectorTimer = 0;
 
@@ -69,7 +70,6 @@ char configInputBuffer[CONFIG_INPUT_MAX] = "";
 int rfidViewIndex = 0;
 volatile uint32_t g_restartAtMs = 0;   // for Utils.h deferred restart
 
-// FIX: Servo Trigger Flag
 bool servoTriggeredThisExplosion = false; 
 
 // Codes
@@ -92,32 +92,42 @@ void setup() {
   factoryResetSettingsIfMagicChanged(); // handle struct changes
   loadSettings();
 
-  // Boot overrides: hold '*' -> config, hold '#' -> disable WiFi this boot
+  // Boot overrides: 
+  // Hold '*' -> config
+  // Hold '#' -> disable WiFi
+  // Hold '0' -> Tolkien Game
   keypad.getKey();
   delay(150);
+  
   bool starHeld = keypad.isPressed('*');
   bool hashHeld = keypad.isPressed('#');
-  if (starHeld || hashHeld) {
+  bool zeroHeld = keypad.isPressed('0');
+
+  if (starHeld || hashHeld || zeroHeld) {
     uint32_t t0 = millis();
-    while (keypad.isPressed('*') || keypad.isPressed('#')) {
+    while (keypad.isPressed('*') || keypad.isPressed('#') || keypad.isPressed('0')) {
       if (millis() - t0 > 1000) break;
     }
   }
+
+  // Handle Boot Flags
   if (hashHeld) {
     wifiOverrideDisabledThisBoot = true;
   }
+  
   if (starHeld) {
     currentState = CONFIG_MODE;
     currentConfigState = MENU_MAIN;
     displayNeedsUpdate = true;
   }
+  
+  // NOTE: Zero held logic is handled at end of setup to allow hardware init first
 
   initHardware(); 
-  // Initialize new modules
   initShellEjector();
   initPlantSensor();
 
-  // Boot screen with version
+  // Boot screen
   lcd.clear();
   lcd.print("C4 Prop Init v");
   lcd.print(FW_VERSION);
@@ -134,9 +144,17 @@ void setup() {
   // Bring up network unless disabled
   beginNetwork(wifiOverrideDisabledThisBoot);
 
+  // Final check for Game Mode
   if (currentState != CONFIG_MODE) {
-    if (armSwitch.read() == LOW) setState(AWAIT_ARM_TOGGLE);
-    else setState(STANDBY);
+    if (zeroHeld) {
+        startTolkienGame();
+    }
+    else if (armSwitch.read() == LOW) {
+        setState(AWAIT_ARM_TOGGLE);
+    } 
+    else {
+        setState(STANDBY);
+    }
   }
 
   Serial.println("Setup complete.");
@@ -145,39 +163,42 @@ void setup() {
 void loop() {
   char key = keypad.getKey();
 
-  // 1. Service Audio Events (MOVED OUTSIDE 'else')
-  // This allows the DFPlayer to report track finished events even in CONFIG_MODE
+  // 1. Service Audio Events
   if (myDFPlayer.available()) {
     printDetail(myDFPlayer.readType(), myDFPlayer.read());
   }
 
   // 2. State Logic
-  if (currentState == CONFIG_MODE) {
-    handleConfigMode(key);
-  } else {
-    disarmButton.update();
-    armSwitch.update();
-    handleArmSwitch();
+  // TOLKIEN GAME overrides normal updates
+  if (currentState == TOLKIEN_GAME) {
+      serviceTolkienGame(key);
+      // We do NOT call updateDisplay() here, as TolkienGame handles its own LCD
+  } 
+  else if (currentState == CONFIG_MODE) {
+      handleConfigMode(key);
+      updateDisplay();
+  } 
+  else {
+      disarmButton.update();
+      armSwitch.update();
+      handleArmSwitch();
 
-    // Timer Logic
-    if (currentState >= ARMED && currentState < DISARMED) {
-      if (millis() - bombArmedTimestamp >= settings.bomb_duration_ms) setState(PRE_EXPLOSION);
-    }
+      // Timer Logic
+      if (currentState >= ARMED && currentState < DISARMED) {
+        if (millis() - bombArmedTimestamp >= settings.bomb_duration_ms) setState(PRE_EXPLOSION);
+      }
 
-    // Explosion safety guard 
-    if (currentState == PRE_EXPLOSION) {
-      uint32_t since = millis() - stateEntryTimestamp;
-      if (since > (PRE_EXPLOSION_FADE_MS + 10000)) setState(EXPLODED); 
-    }
+      // Explosion safety guard 
+      if (currentState == PRE_EXPLOSION) {
+        uint32_t since = millis() - stateEntryTimestamp;
+        if (since > (PRE_EXPLOSION_FADE_MS + 10000)) setState(EXPLODED); 
+      }
 
-    // Unified gameplay handler
-    serviceGameplay(key);
+      serviceGameplay(key);
+      updateDisplay();
   }
-
-  updateDisplay();
   
-  // OPTIMIZATION: Throttle LEDs to ~33 FPS (30ms)
-  // Updating LEDs every loop (1ms) disables interrupts and lags Keypad.
+  // OPTIMIZATION: Throttle LEDs
   static uint32_t lastLedUpdate = 0;
   if (millis() - lastLedUpdate > 30) {
       updateLeds();
@@ -186,7 +207,7 @@ void loop() {
   
   menuBeepPump();   
   restartPump();    
-  updateShellEjector(); // Checks servo timing
+  updateShellEjector();
   networkLoop();
 
   delay(1);

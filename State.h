@@ -1,7 +1,6 @@
 // State.h
-// VERSION: 6.5.1
-// FIXED: Auto-Typing persistence during state change (IDLE->ARMING)
-// FIXED: Immediate DFPlayer Soft Reset on Error
+// VERSION: 6.6.0
+// UPDATE: Added TOLKIEN_GAME state
 
 #pragma once
 #include "Config.h"
@@ -36,7 +35,8 @@ enum PropState {
   EASTER_EGG, EASTER_EGG_2,
   CONFIG_MODE,
   STARWARS_PRE_GAME,
-  PROP_DUD  
+  PROP_DUD,
+  TOLKIEN_GAME // <--- NEW STATE
 };
 
 // Config/menu states
@@ -114,6 +114,7 @@ inline const char* getStateName(PropState state) {
     case CONFIG_MODE: return "CONFIG_MODE";
     case STARWARS_PRE_GAME: return "STARWARS_PRE";
     case PROP_DUD: return "PROP_DUD";
+    case TOLKIEN_GAME: return "TOLKIEN_GAME"; // <--- NEW NAME
     default: return "UNKNOWN";
   }
 }
@@ -152,7 +153,6 @@ inline void setState(PropState newState) {
   enteredCode[0] = '\0';
   
   // FIX: Protect Auto-Typing during IDLE -> ARMING transition
-  // If we don't protect it, setState kills the flag immediately after the first digit is typed.
   if ( ! (oldState == PROP_IDLE && newState == ARMING) ) {
       autoTypingActive = false; 
   }
@@ -264,6 +264,10 @@ inline void setState(PropState newState) {
       safePlay(SOUND_JUGS); 
       break;
       
+    case TOLKIEN_GAME:
+      // No specific init logic here, handled in TolkienGame.h wrapper
+      break;
+      
     default: break;
   }
 }
@@ -272,8 +276,6 @@ inline void printDetail(uint8_t type, int value) {
 
   // --- ERROR HANDLING & RECOVERY ---
   if (type == DFPlayerError) {
-    // If we detect *any* error (checksum, busy, etc), try a hard recovery.
-    // Note: The reset includes a delay(1200) which will briefly pause gameplay.
     Serial.print(F("[DFPlayer] Err Code: ")); Serial.println(value);
     dfplayerSoftReset();
     return;
